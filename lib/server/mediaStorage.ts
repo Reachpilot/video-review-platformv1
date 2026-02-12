@@ -53,9 +53,10 @@ const manualBlobOptions: ManualBlobOptions | undefined =
     : undefined;
 
 const wantsBlobStorage = process.env.USE_BLOB_STORAGE === 'true';
-const runningOnNetlify = process.env.NETLIFY === 'true';
-const requiresBlobStorage = runningOnNetlify || wantsBlobStorage;
-const isBlobEnv = Boolean(netlifyContext || manualBlobOptions || runningOnNetlify);
+const hasBlobContext = Boolean(netlifyContext || manualBlobOptions);
+const staticMediaMode = !wantsBlobStorage && !hasBlobContext;
+const requiresBlobStorage = wantsBlobStorage;
+const isBlobEnv = hasBlobContext;
 
 const ensureBlobConfigured = () => {
   if (requiresBlobStorage && !isBlobEnv) {
@@ -131,6 +132,9 @@ export const guessContentType = (key: string) => {
 export const isBlobStorageEnabled = () => isBlobEnv;
 
 export const generateSignedBlobUploadUrl = async (_key: string) => {
+  if (staticMediaMode) {
+    throw new Error('Direct blob uploads are disabled when using static media.');
+  }
   throw new Error('Direct blob uploads are temporarily disabled.');
 };
 
@@ -139,19 +143,24 @@ export const saveMediaAsset = async (
   data: ArrayBuffer | Buffer | Uint8Array,
   contentType?: string
 ) => {
-  ensureBlobConfigured();
-  if (isBlobEnv) {
-    const store = getMediaStore();
-    await store.set(key, toArrayBuffer(data), {
-      metadata: {
-        contentType: contentType || guessContentType(key),
-      },
-    });
-  } else {
+  if (!isBlobEnv) {
     const targetPath = join(process.cwd(), 'public', key);
     await ensureLocalDir(targetPath);
     await writeFile(targetPath, toBuffer(data));
+
+    return {
+      key,
+      url: mediaUrlFromKey(key),
+    };
   }
+
+  ensureBlobConfigured();
+  const store = getMediaStore();
+  await store.set(key, toArrayBuffer(data), {
+    metadata: {
+      contentType: contentType || guessContentType(key),
+    },
+  });
 
   return {
     key,
@@ -165,8 +174,8 @@ export const readMediaAsset = async (key: string) => {
     return null;
   }
 
-  ensureBlobConfigured();
   if (isBlobEnv) {
+    ensureBlobConfigured();
     const store = getMediaStore();
     const entry = await store.getWithMetadata(sanitized, { type: 'arrayBuffer' });
     if (!entry?.data) {
