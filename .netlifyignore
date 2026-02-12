@@ -1,0 +1,3 @@
+# Exclude local demo uploads so Netlify functions stay below size limits
+public/uploads/**
+uploads/**
