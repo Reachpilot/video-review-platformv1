@@ -6,6 +6,8 @@ const TARGETS = [
   join(__dirname, '..', 'uploads'),
 ];
 
+const shouldPurge = process.env.PURGE_UPLOADS === 'true';
+
 async function deleteFolder(target) {
   try {
     await rm(target, { recursive: true, force: true });
@@ -16,6 +18,10 @@ async function deleteFolder(target) {
 }
 
 async function main() {
+  if (!shouldPurge) {
+    console.log('Skipping uploads cleanup (set PURGE_UPLOADS=true to enable).');
+    return;
+  }
   await Promise.all(TARGETS.map(deleteFolder));
 }
 
