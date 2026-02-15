@@ -1,10 +1,13 @@
 import { readdir, stat } from 'fs/promises';
 import { existsSync } from 'fs';
 import { join, extname, basename } from 'path';
+import { execFile } from 'child_process';
+import { promisify } from 'util';
+import ffprobe from 'ffprobe-static';
 
 import { Video } from '@/types';
 import { DEFAULT_THUMBNAIL } from '@/lib/placeholders';
-import { mediaKey, readMediaAsset, saveMediaAsset } from './mediaStorage';
+import { mediaKey, mediaUrlFromKey, readMediaAsset, saveMediaAsset } from './mediaStorage';
 
 export type VideoSegment = 'default' | 'mpu';
 
@@ -76,10 +79,35 @@ const ensureFileList = async () => {
   }
 };
 
+const execFileAsync = promisify(execFile);
+
+const probeDurationSeconds = async (absolutePath: string) => {
+  const ffprobePath = ffprobe?.path;
+  if (!ffprobePath) {
+    throw new Error('ffprobe binary not available');
+  }
+
+  const args = [
+    '-v',
+    'error',
+    '-show_entries',
+    'format=duration',
+    '-of',
+    'default=noprint_wrappers=1:nokey=1',
+    absolutePath,
+  ];
+
+  const { stdout } = await execFileAsync(ffprobePath, args);
+  const seconds = parseFloat(String(stdout).trim());
+  if (!Number.isFinite(seconds)) {
+    throw new Error('Invalid duration output');
+  }
+  return seconds;
+};
+
 const getDurationLabel = async (absolutePath: string) => {
   try {
-    const { getVideoDurationInSeconds } = await import('get-video-duration');
-    const seconds = await getVideoDurationInSeconds(absolutePath);
+    const seconds = await probeDurationSeconds(absolutePath);
     return formatDuration(seconds);
   } catch (error) {
     console.warn('Failed to determine duration for %s: %s', absolutePath, (error as Error)?.message || error);
@@ -94,6 +122,8 @@ const buildVideoRecord = async (fileName: string): Promise<Video> => {
   const slug = slugify(base) || `video-${fileStats.mtimeMs}`;
   const thumbPath = join(PUBLIC_THUMBS_DIR, `${slug}.jpg`);
   const hasThumbnail = existsSync(thumbPath);
+  const videoKey = mediaKey('videos', fileName);
+  const thumbKey = mediaKey('videos', 'thumbnails', `${slug}.jpg`);
   const duration = await getDurationLabel(absolutePath);
 
   return {
@@ -101,8 +131,8 @@ const buildVideoRecord = async (fileName: string): Promise<Video> => {
     title: toTitleCase(slug) || fileName,
     description: '',
     fileName,
-    filePath: `/api/media/uploads/videos/${fileName}`,
-    thumbnailUrl: hasThumbnail ? `/api/media/uploads/videos/thumbnails/${slug}.jpg` : DEFAULT_THUMBNAIL,
+    filePath: mediaUrlFromKey(videoKey),
+    thumbnailUrl: hasThumbnail ? mediaUrlFromKey(thumbKey) : DEFAULT_THUMBNAIL,
     status: DEFAULT_STATUS,
     uploadedAt: fileStats.mtime.toISOString(),
     duration,
@@ -126,13 +156,35 @@ const syncStoreWithFilesystem = async (store: VideoStore): Promise<VideoStore> =
   const newlyDiscovered: Video[] = [];
   for (const fileName of validEntries) {
     const existing = existingByFile.get(fileName);
+    const metadata = await buildVideoRecord(fileName);
     if (existing) {
-      retained.push(existing);
+      const merged = {
+        ...existing,
+        filePath: metadata.filePath,
+        thumbnailUrl:
+          existing.thumbnailUrl && existing.thumbnailUrl !== DEFAULT_THUMBNAIL
+            ? existing.thumbnailUrl
+            : metadata.thumbnailUrl,
+        duration: metadata.duration,
+        size: metadata.size,
+        uploadedAt: existing.uploadedAt || metadata.uploadedAt,
+      } satisfies Video;
+
+      if (
+        merged.filePath !== existing.filePath ||
+        merged.thumbnailUrl !== existing.thumbnailUrl ||
+        merged.duration !== existing.duration ||
+        merged.size !== existing.size ||
+        merged.uploadedAt !== existing.uploadedAt
+      ) {
+        needsPersist = true;
+      }
+
+      retained.push(merged);
       continue;
     }
     // New file -> create default record
-    const record = await buildVideoRecord(fileName);
-    newlyDiscovered.push(record);
+    newlyDiscovered.push(metadata);
     needsPersist = true;
   }
 
