@@ -118,28 +118,27 @@ const syncStoreWithFilesystem = async (store: VideoStore): Promise<VideoStore> =
   const existingByFile = new Map(store.default.map(video => [video.fileName, video] as const));
   let needsPersist = false;
 
-  const discovered: Video[] = [];
+  const retained: Video[] = [];
+  const newlyDiscovered: Video[] = [];
   for (const fileName of validEntries) {
     const existing = existingByFile.get(fileName);
     if (existing) {
-      discovered.push(existing);
+      retained.push(existing);
       continue;
     }
     // New file -> create default record
     const record = await buildVideoRecord(fileName);
-    discovered.push(record);
+    newlyDiscovered.push(record);
     needsPersist = true;
   }
 
   const existingFiles = new Set(validEntries);
-  const keptExisting = store.default.filter(video => existingFiles.has(video.fileName));
-  if (keptExisting.length !== store.default.length) {
+  const removedCount = store.default.filter(video => !existingFiles.has(video.fileName)).length;
+  if (removedCount > 0) {
     needsPersist = true;
   }
 
-  const merged = [...keptExisting]
-    .filter(video => !validEntries.includes(video.fileName))
-    .concat(discovered)
+  const merged = [...retained, ...newlyDiscovered]
     .sort((a, b) => new Date(b.uploadedAt).getTime() - new Date(a.uploadedAt).getTime());
 
   const nextStore: VideoStore = {
