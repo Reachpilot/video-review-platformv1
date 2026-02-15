@@ -15,6 +15,8 @@ const VIDEOS_DIR = path.join(UPLOADS_ROOT, 'videos');
 const THUMBS_DIR = path.join(VIDEOS_DIR, 'thumbnails');
 const DATA_DIR = path.join(UPLOADS_ROOT, 'data');
 const DATA_FILE = path.join(DATA_DIR, 'videos.json');
+const useMediaProxy = process.env.USE_BLOB_STORAGE === 'true';
+const mediaUrlFromKey = key => (useMediaProxy ? `/api/media/${key}` : `/${key}`);
 
 const IGNORED_FILES = new Set(['.gitkeep']);
 const SUPPORTED_EXTENSIONS = new Set(['.mp4', '.mov', '.webm', '.mkv', '.avi']);
@@ -157,8 +159,8 @@ const buildVideoRecord = async entry => {
     title: startCase(slug) || entry.name,
     description: '',
     fileName: entry.name,
-    filePath: `/api/media/${relativeVideoKey}`,
-    thumbnailUrl: `/api/media/${relativeThumbnailKey}`,
+    filePath: mediaUrlFromKey(relativeVideoKey),
+    thumbnailUrl: mediaUrlFromKey(relativeThumbnailKey),
     status: DEFAULT_STATUS,
     uploadedAt: stats.mtime.toISOString(),
     duration: durationLabel,

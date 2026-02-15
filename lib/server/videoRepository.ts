@@ -160,6 +160,7 @@ const syncStoreWithFilesystem = async (store: VideoStore): Promise<VideoStore> =
     if (existing) {
       const merged = {
         ...existing,
+        fileName: existing.fileName || metadata.fileName,
         filePath: metadata.filePath,
         thumbnailUrl:
           existing.thumbnailUrl && existing.thumbnailUrl !== DEFAULT_THUMBNAIL
@@ -168,6 +169,9 @@ const syncStoreWithFilesystem = async (store: VideoStore): Promise<VideoStore> =
         duration: metadata.duration,
         size: metadata.size,
         uploadedAt: existing.uploadedAt || metadata.uploadedAt,
+        description: existing.description ?? metadata.description,
+        uploader: existing.uploader || metadata.uploader,
+        comments: existing.comments || metadata.comments,
       } satisfies Video;
 
       if (
