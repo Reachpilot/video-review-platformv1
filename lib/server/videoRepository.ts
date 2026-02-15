@@ -1,3 +1,8 @@
+import { readdir, stat } from 'fs/promises';
+import { existsSync } from 'fs';
+import { join, extname, basename } from 'path';
+import { getVideoDurationInSeconds } from 'get-video-duration';
+
 import { Video } from '@/types';
 import { DEFAULT_THUMBNAIL } from '@/lib/placeholders';
 import { mediaKey, readMediaAsset, saveMediaAsset } from './mediaStorage';
@@ -11,43 +16,144 @@ interface VideoStore {
 
 const VIDEO_STORE_KEY = mediaKey('data', 'videos.json');
 
-const demoVideos: Video[] = [
-  {
-    id: 'vid-demo-1',
-    title: 'Onboarding Clip',
-    description: 'Kurze Einführung in den Ablauf.',
-    fileName: 'onboarding.mp4',
-    filePath: '/videos/demo1.mp4',
-    thumbnailUrl: DEFAULT_THUMBNAIL,
-    status: 'pending',
-    uploadedAt: new Date(2026, 0, 28, 9, 0).toISOString(),
-    duration: '02:45',
-    size: '54 MB',
-    uploader: 'Nina',
-    comments: [],
-  },
-  {
-    id: 'vid-demo-2',
-    title: 'Produkt Teaser',
-    description: '30 Sekunden Social Spot.',
-    fileName: 'teaser.mp4',
-    filePath: '/videos/demo2.mp4',
-    thumbnailUrl: DEFAULT_THUMBNAIL,
-    status: 'needs_revision',
-    uploadedAt: new Date(2026, 0, 27, 14, 30).toISOString(),
-    duration: '00:30',
-    size: '12 MB',
-    uploader: 'Lea',
-    comments: [],
-  },
-];
-
-const clone = <T>(value: T): T => JSON.parse(JSON.stringify(value));
+const PUBLIC_UPLOADS_DIR = join(process.cwd(), 'public', 'uploads');
+const PUBLIC_VIDEOS_DIR = join(PUBLIC_UPLOADS_DIR, 'videos');
+const PUBLIC_THUMBS_DIR = join(PUBLIC_VIDEOS_DIR, 'thumbnails');
+const DATA_FILE_KEY = mediaKey('data', 'videos.json');
+const SUPPORTED_EXTENSIONS = new Set(['.mp4', '.mov', '.webm', '.mkv', '.avi']);
+const IGNORED_FILES = new Set(['.gitkeep', '.DS_Store']);
+const DEFAULT_UPLOADER = process.env.MANUAL_UPLOAD_UPLOADER || 'Manueller Upload';
+const DEFAULT_STATUS: Video['status'] = 'pending';
 
 const getInitialStore = (): VideoStore => ({
-  default: clone(demoVideos),
+  default: [],
   mpu: [],
 });
+
+const slugify = (value: string) =>
+  value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .replace(/-{2,}/g, '-');
+
+const toTitleCase = (value: string) =>
+  value
+    .split('-')
+    .filter(Boolean)
+    .map(part => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ');
+
+const formatBytes = (bytes: number) => {
+  if (!Number.isFinite(bytes) || bytes <= 0) return '0 B';
+  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+  const i = Math.min(units.length - 1, Math.floor(Math.log(bytes) / Math.log(1024)));
+  const value = bytes / Math.pow(1024, i);
+  return `${value.toFixed(i === 0 ? 0 : 2)} ${units[i]}`;
+};
+
+const formatDuration = (seconds: number) => {
+  if (!Number.isFinite(seconds) || seconds <= 0) return '00:00';
+  const totalSeconds = Math.round(seconds);
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const secs = totalSeconds % 60;
+  const pad = (val: number) => String(val).padStart(2, '0');
+  if (hours > 0) {
+    return `${pad(hours)}:${pad(minutes)}:${pad(secs)}`;
+  }
+  return `${pad(minutes)}:${pad(secs)}`;
+};
+
+const ensureFileList = async () => {
+  try {
+    const entries = await readdir(PUBLIC_VIDEOS_DIR, { withFileTypes: true });
+    return entries.filter(entry => entry.isFile());
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+      return [];
+    }
+    throw error;
+  }
+};
+
+const buildVideoRecord = async (fileName: string): Promise<Video> => {
+  const absolutePath = join(PUBLIC_VIDEOS_DIR, fileName);
+  const fileStats = await stat(absolutePath);
+  const base = basename(fileName, extname(fileName));
+  const slug = slugify(base) || `video-${fileStats.mtimeMs}`;
+  const thumbPath = join(PUBLIC_THUMBS_DIR, `${slug}.jpg`);
+  const hasThumbnail = existsSync(thumbPath);
+  let duration = '00:00';
+  try {
+    const seconds = await getVideoDurationInSeconds(absolutePath);
+    duration = formatDuration(seconds);
+  } catch (error) {
+    console.warn(`Failed to determine duration for ${fileName}:`, error);
+  }
+
+  return {
+    id: `vid-${slug}`,
+    title: toTitleCase(slug) || fileName,
+    description: '',
+    fileName,
+    filePath: `/api/media/uploads/videos/${fileName}`,
+    thumbnailUrl: hasThumbnail ? `/api/media/uploads/videos/thumbnails/${slug}.jpg` : DEFAULT_THUMBNAIL,
+    status: DEFAULT_STATUS,
+    uploadedAt: fileStats.mtime.toISOString(),
+    duration,
+    size: formatBytes(fileStats.size),
+    uploader: DEFAULT_UPLOADER,
+    comments: [],
+  };
+};
+
+const syncStoreWithFilesystem = async (store: VideoStore): Promise<VideoStore> => {
+  const fileEntries = await ensureFileList();
+  const validEntries = fileEntries
+    .map(entry => entry.name)
+    .filter(name => !IGNORED_FILES.has(name))
+    .filter(name => SUPPORTED_EXTENSIONS.has(extname(name).toLowerCase()));
+
+  const existingByFile = new Map(store.default.map(video => [video.fileName, video] as const));
+  let needsPersist = false;
+
+  const discovered: Video[] = [];
+  for (const fileName of validEntries) {
+    const existing = existingByFile.get(fileName);
+    if (existing) {
+      discovered.push(existing);
+      continue;
+    }
+    // New file -> create default record
+    const record = await buildVideoRecord(fileName);
+    discovered.push(record);
+    needsPersist = true;
+  }
+
+  const existingFiles = new Set(validEntries);
+  const keptExisting = store.default.filter(video => existingFiles.has(video.fileName));
+  if (keptExisting.length !== store.default.length) {
+    needsPersist = true;
+  }
+
+  const merged = [...keptExisting]
+    .filter(video => !validEntries.includes(video.fileName))
+    .concat(discovered)
+    .sort((a, b) => new Date(b.uploadedAt).getTime() - new Date(a.uploadedAt).getTime());
+
+  const nextStore: VideoStore = {
+    default: merged,
+    mpu: store.mpu || [],
+  };
+
+  if (needsPersist) {
+    await persistStore(nextStore);
+    return nextStore;
+  }
+
+  return store;
+};
 
 const parseStore = (raw: Buffer | undefined | null): VideoStore => {
   if (!raw || raw.length === 0) {
@@ -67,18 +173,19 @@ const parseStore = (raw: Buffer | undefined | null): VideoStore => {
 };
 
 const persistStore = async (store: VideoStore) => {
-  await saveMediaAsset(VIDEO_STORE_KEY, Buffer.from(JSON.stringify(store, null, 2)), 'application/json');
+  await saveMediaAsset(DATA_FILE_KEY, Buffer.from(JSON.stringify(store, null, 2)), 'application/json');
 };
 
 const loadStore = async (): Promise<VideoStore> => {
-  const asset = await readMediaAsset(VIDEO_STORE_KEY);
+  const asset = await readMediaAsset(DATA_FILE_KEY);
   if (!asset?.data) {
     const initial = getInitialStore();
     await persistStore(initial);
-    return initial;
+    return syncStoreWithFilesystem(initial);
   }
 
-  return parseStore(asset.data);
+  const parsed = parseStore(asset.data);
+  return syncStoreWithFilesystem(parsed);
 };
 
 const normalizeSegment = (segment?: string | null): VideoSegment => (segment === 'mpu' ? 'mpu' : 'default');

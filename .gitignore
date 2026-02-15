@@ -9,3 +9,6 @@ netlify/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+public/uploads/data/videos.json
+public/uploads/videos/thumbnails/*
+!public/uploads/videos/thumbnails/.gitkeep
