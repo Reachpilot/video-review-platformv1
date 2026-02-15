@@ -1,7 +1,6 @@
 import { readdir, stat } from 'fs/promises';
 import { existsSync } from 'fs';
 import { join, extname, basename } from 'path';
-import { getVideoDurationInSeconds } from 'get-video-duration';
 
 import { Video } from '@/types';
 import { DEFAULT_THUMBNAIL } from '@/lib/placeholders';
@@ -77,6 +76,17 @@ const ensureFileList = async () => {
   }
 };
 
+const getDurationLabel = async (absolutePath: string) => {
+  try {
+    const { getVideoDurationInSeconds } = await import('get-video-duration');
+    const seconds = await getVideoDurationInSeconds(absolutePath);
+    return formatDuration(seconds);
+  } catch (error) {
+    console.warn('Failed to determine duration for %s: %s', absolutePath, (error as Error)?.message || error);
+    return '00:00';
+  }
+};
+
 const buildVideoRecord = async (fileName: string): Promise<Video> => {
   const absolutePath = join(PUBLIC_VIDEOS_DIR, fileName);
   const fileStats = await stat(absolutePath);
@@ -84,13 +94,7 @@ const buildVideoRecord = async (fileName: string): Promise<Video> => {
   const slug = slugify(base) || `video-${fileStats.mtimeMs}`;
   const thumbPath = join(PUBLIC_THUMBS_DIR, `${slug}.jpg`);
   const hasThumbnail = existsSync(thumbPath);
-  let duration = '00:00';
-  try {
-    const seconds = await getVideoDurationInSeconds(absolutePath);
-    duration = formatDuration(seconds);
-  } catch (error) {
-    console.warn(`Failed to determine duration for ${fileName}:`, error);
-  }
+  const duration = await getDurationLabel(absolutePath);
 
   return {
     id: `vid-${slug}`,
