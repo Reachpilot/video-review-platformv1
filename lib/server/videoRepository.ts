@@ -67,13 +67,18 @@ const formatDuration = (seconds: number) => {
   return `${pad(minutes)}:${pad(secs)}`;
 };
 
-const ensureFileList = async () => {
+interface FileListResult {
+  entries: import('fs').Dirent[];
+  exists: boolean;
+}
+
+const readVideoDirectory = async (): Promise<FileListResult> => {
   try {
     const entries = await readdir(PUBLIC_VIDEOS_DIR, { withFileTypes: true });
-    return entries.filter(entry => entry.isFile());
+    return { entries: entries.filter(entry => entry.isFile()), exists: true };
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
-      return [];
+      return { entries: [], exists: false };
     }
     throw error;
   }
@@ -143,7 +148,12 @@ const buildVideoRecord = async (fileName: string): Promise<Video> => {
 };
 
 const syncStoreWithFilesystem = async (store: VideoStore): Promise<VideoStore> => {
-  const fileEntries = await ensureFileList();
+  const { entries: fileEntries, exists } = await readVideoDirectory();
+  if (!exists) {
+    // On serverless builds, the uploads directory might not be present (static assets served via CDN).
+    // In that case, keep the existing store as-is.
+    return store;
+  }
   const validEntries = fileEntries
     .map(entry => entry.name)
     .filter(name => !IGNORED_FILES.has(name))
