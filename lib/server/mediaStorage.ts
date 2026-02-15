@@ -54,7 +54,7 @@ const manualBlobOptions: ManualBlobOptions | undefined =
 
 const wantsBlobStorage = process.env.USE_BLOB_STORAGE === 'true';
 const hasBlobContext = Boolean(netlifyContext || manualBlobOptions);
-const staticMediaMode = !wantsBlobStorage && !hasBlobContext;
+export const staticMediaMode = !wantsBlobStorage && !hasBlobContext;
 const requiresBlobStorage = wantsBlobStorage;
 const isBlobEnv = hasBlobContext;
 
@@ -122,7 +122,7 @@ export const mediaKey = (...segments: string[]) => {
   return [MEDIA_ROOT, ...cleanSegments].join('/');
 };
 
-export const mediaUrlFromKey = (key: string) => `/api/media/${key}`;
+export const mediaUrlFromKey = (key: string) => (staticMediaMode ? `/${key}` : `/api/media/${key}`);
 
 export const guessContentType = (key: string) => {
   const extMatch = key.split('.').pop()?.toLowerCase();
