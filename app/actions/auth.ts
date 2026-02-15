@@ -13,7 +13,7 @@ const users = [
   },
   {
     username: 'LACKMANN',
-    password: 'Redakteur123',
+    password: 'Redakteur123!',
     role: 'admin',
     name: 'LACKMANN',
     redirect: '/'
