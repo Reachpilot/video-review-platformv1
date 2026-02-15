@@ -82,7 +82,7 @@ const ensureFileList = async () => {
 const execFileAsync = promisify(execFile);
 
 const probeDurationSeconds = async (absolutePath: string) => {
-  const ffprobePath = ffprobe?.path;
+  const ffprobePath = typeof ffprobe === 'string' ? ffprobe : (ffprobe as { path?: string } | undefined)?.path;
   if (!ffprobePath) {
     throw new Error('ffprobe binary not available');
   }
