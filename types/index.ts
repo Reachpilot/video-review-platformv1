@@ -14,7 +14,7 @@ export interface Video {
   fileName: string;
   filePath: string;
   thumbnailUrl: string;
-  status: 'pending' | 'needs_revision' | 'approved';
+  status: 'pending' | 'needs_revision' | 'approved' | 'uploaded';
   scheduledDate?: string | null;
   uploadedAt: Date | string;
   comments: Comment[];

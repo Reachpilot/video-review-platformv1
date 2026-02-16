@@ -3,7 +3,7 @@
 import { Video } from '@/types';
 import Link from 'next/link';
 import { format } from 'date-fns';
-import { PlayIcon, ClockIcon, CheckCircleIcon, ExclamationCircleIcon } from '@heroicons/react/24/outline';
+import { PlayIcon, ClockIcon, CheckCircleIcon, ExclamationCircleIcon, ArrowUpTrayIcon } from '@heroicons/react/24/outline';
 
 interface VideoCardProps {
   video: Video;
@@ -15,12 +15,14 @@ export default function VideoCard({ video, onStatusChange }: VideoCardProps) {
     pending: <ClockIcon className="h-4 w-4 text-yellow-500" />,
     needs_revision: <ExclamationCircleIcon className="h-4 w-4 text-red-500" />,
     approved: <CheckCircleIcon className="h-4 w-4 text-green-500" />,
+    uploaded: <ArrowUpTrayIcon className="h-4 w-4 text-purple-500" />,
   };
 
   const statusText = {
     pending: 'Pending Review',
     needs_revision: 'Needs Revision',
     approved: 'Approved',
+    uploaded: 'Uploaded',
   };
 
   return (
@@ -74,6 +76,7 @@ export default function VideoCard({ video, onStatusChange }: VideoCardProps) {
           <option value="pending">Pending Review</option>
           <option value="needs_revision">Needs Revision</option>
           <option value="approved">Approved</option>
+          <option value="uploaded">Uploaded</option>
         </select>
       </div>
     </div>

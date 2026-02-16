@@ -175,7 +175,7 @@ export async function replaceVideoFile(
 
 export async function updateVideoStatus(
   id: string,
-  status: 'pending' | 'needs_revision' | 'approved',
+  status: Video['status'],
   isMpu = false
 ): Promise<Video> {
   return updateVideoMetadata(id, { status }, isMpu);

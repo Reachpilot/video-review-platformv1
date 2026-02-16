@@ -24,7 +24,8 @@ import { DEFAULT_THUMBNAIL } from '@/lib/placeholders';
       <svg className="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
       </svg>
-    )
+    ),
+    uploaded: <ArrowUpTrayIcon className="w-4 h-4 mr-1.5 text-purple-600" />
   };
 
   // Helper functions for status styling
@@ -50,6 +51,13 @@ import { DEFAULT_THUMBNAIL } from '@/lib/placeholders';
         border: 'border-green-100',
         hover: 'hover:bg-green-100',
         label: 'Approved'
+      },
+      uploaded: {
+        bg: 'bg-purple-50',
+        text: 'text-purple-700',
+        border: 'border-purple-100',
+        hover: 'hover:bg-purple-100',
+        label: 'Uploaded'
       },
       default: {
         bg: 'bg-gray-50',
@@ -79,6 +87,11 @@ import { DEFAULT_THUMBNAIL } from '@/lib/placeholders';
         icon: StatusIcons.approved,
         label: 'Approved',
         color: 'green'
+      },
+      uploaded: {
+        icon: StatusIcons.uploaded,
+        label: 'Uploaded',
+        color: 'purple'
       }
     };
 
@@ -98,12 +111,13 @@ import {
   PlayIcon,
   ArrowUpIcon,
   ArrowDownIcon,
-  ArrowsUpDownIcon
+  ArrowsUpDownIcon,
+  ArrowUpTrayIcon
 } from '@heroicons/react/24/outline';
 
 type SortField = 'title' | 'uploadedAt' | 'scheduledDate' | 'status' | 'uploader' | 'duration';
 type SortDirection = 'asc' | 'desc';
-type VideoStatus = 'pending' | 'needs_revision' | 'approved';
+type VideoStatus = 'pending' | 'needs_revision' | 'approved' | 'uploaded';
 type MetadataOverride = { title: string; description: string };
 
 interface VideoTableProps {
@@ -205,7 +219,7 @@ export default function VideoTable({ videos = [], onVideoUpdated, onVideoDeleted
   );
   
   // Handle status update
-  const handleStatusChange = async (id: string, newStatus: 'pending' | 'needs_revision' | 'approved') => {
+  const handleStatusChange = async (id: string, newStatus: VideoStatus) => {
     try {
       setIsUpdating(true);
       const updatedVideo = await updateVideoStatus(id, newStatus, isMpu);
@@ -319,6 +333,11 @@ export default function VideoTable({ videos = [], onVideoUpdated, onVideoDeleted
         bg: 'bg-green-100',
         text: 'text-green-800',
         icon: StatusIcons.approved
+      },
+      uploaded: {
+        bg: 'bg-purple-100',
+        text: 'text-purple-800',
+        icon: StatusIcons.uploaded
       }
     };
 
@@ -597,6 +616,7 @@ export default function VideoTable({ videos = [], onVideoUpdated, onVideoDeleted
             <option value="pending">Pending</option>
             <option value="needs_revision">Needs Revision</option>
             <option value="approved">Approved</option>
+            <option value="uploaded">Uploaded</option>
           </select>
         </div>
       </div>
@@ -698,6 +718,12 @@ export default function VideoTable({ videos = [], onVideoUpdated, onVideoDeleted
                                   <div className="flex items-center">
                                     {StatusIcons.approved}
                                     <span>Approved</span>
+                                  </div>
+                                </option>
+                                <option value="uploaded" className="bg-white text-purple-700">
+                                  <div className="flex items-center">
+                                    {StatusIcons.uploaded}
+                                    <span>Uploaded</span>
                                   </div>
                                 </option>
                               </select>
