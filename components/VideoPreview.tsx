@@ -25,6 +25,10 @@ export default function VideoPreview({ isOpen, onClose, video, onUpdate, onDelet
   const [isSubmittingCorrection, setIsSubmittingCorrection] = useState(false);
   const [replacementFile, setReplacementFile] = useState<File | null>(null);
   const [isReplacingVideo, setIsReplacingVideo] = useState(false);
+  const [localTitle, setLocalTitle] = useState('');
+  const [localDescription, setLocalDescription] = useState('');
+  const [isSavingMetadata, setIsSavingMetadata] = useState(false);
+  const [metadataSavedAt, setMetadataSavedAt] = useState<number | null>(null);
 
   const getVideoDurationFromFile = (file: File): Promise<string> => {
     return new Promise((resolve) => {
@@ -153,9 +157,42 @@ export default function VideoPreview({ isOpen, onClose, video, onUpdate, onDelet
     }
     setCorrectionNote('');
     setCorrectionTimestamp('');
+    setLocalTitle(video?.title || '');
+    setLocalDescription(video?.description || '');
+    setMetadataSavedAt(null);
   }, [video]);
 
   if (!video) return null;
+
+  const hasMetadataChanges =
+    localTitle.trim() !== (video.title || '').trim() || (localDescription || '') !== (video.description || '');
+
+  const handleMetadataSave = async () => {
+    if (!video) return;
+    const nextTitle = localTitle.trim() || video.title;
+    const nextDescription = localDescription;
+
+    if (nextTitle.length === 0) {
+      alert('Titel darf nicht leer sein.');
+      return;
+    }
+
+    try {
+      setIsSavingMetadata(true);
+      const updatedVideo = {
+        ...video,
+        title: nextTitle,
+        description: nextDescription,
+      };
+      await (onUpdate ? Promise.resolve(onUpdate(updatedVideo)) : Promise.resolve());
+      setMetadataSavedAt(Date.now());
+    } catch (error) {
+      console.error('Failed to update metadata', error);
+      alert('Titel/Beschreibung konnten nicht gespeichert werden.');
+    } finally {
+      setIsSavingMetadata(false);
+    }
+  };
 
   const handleScheduleUpdate = () => {
     if (!video || !localScheduledDate) return;
@@ -384,9 +421,46 @@ export default function VideoPreview({ isOpen, onClose, video, onUpdate, onDelet
                         </video>
                       </div>
                       <div className="w-full sm:w-1/2 space-y-4 overflow-y-auto" style={{ maxHeight: '80vh' }}>
-                        <div>
-                          <h4 className="font-medium text-gray-900">Description</h4>
-                          <p className="text-gray-600 mt-1 text-sm">{video.description || 'No description available.'}</p>
+                        <div className="space-y-3">
+                          <div>
+                            <label htmlFor="video-title" className="block text-sm font-medium text-gray-700">
+                              Titel
+                            </label>
+                            <input
+                              id="video-title"
+                              type="text"
+                              value={localTitle}
+                              onChange={(e) => setLocalTitle(e.target.value)}
+                              className="mt-1 block w-full rounded-md border border-gray-300 py-2 px-3 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                              maxLength={120}
+                            />
+                          </div>
+                          <div>
+                            <label htmlFor="video-description" className="block text-sm font-medium text-gray-700">
+                              Beschreibung
+                            </label>
+                            <textarea
+                              id="video-description"
+                              rows={4}
+                              value={localDescription}
+                              onChange={(e) => setLocalDescription(e.target.value)}
+                              className="mt-1 block w-full rounded-md border border-gray-300 py-2 px-3 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                              placeholder="Beschreibe das Video..."
+                            />
+                          </div>
+                          <div className="flex items-center justify-between">
+                            <div className="text-xs text-gray-500">
+                              {hasMetadataChanges ? 'Änderungen nicht gespeichert' : metadataSavedAt ? 'Alle Änderungen gespeichert' : 'Keine Änderungen'}
+                            </div>
+                            <button
+                              type="button"
+                              onClick={handleMetadataSave}
+                              disabled={!hasMetadataChanges || isSavingMetadata}
+                              className="inline-flex items-center rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-50"
+                            >
+                              {isSavingMetadata ? 'Speichert…' : 'Titel & Beschreibung speichern'}
+                            </button>
+                          </div>
                         </div>
                         
                         <div className="border-t border-gray-200 pt-4">
