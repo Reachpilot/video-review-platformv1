@@ -1,39 +1,11 @@
 'use server';
 
 import { cookies } from 'next/headers';
-
-// User database
-const users = [
-  {
-    username: 'TNT STUDIO',
-    password: 'Tiagoistjarispapa23!!',
-    role: 'superadmin',
-    name: 'TNT STUDIO',
-    redirect: '/admin'
-  },
-  {
-    username: 'LACKMANN',
-    password: 'Redakteur123!',
-    role: 'admin',
-    name: 'LACKMANN',
-    redirect: '/'
-  },
-  {
-    username: 'MPU DEIN PARTNER',
-    password: 'hamed2025!',
-    role: 'mpu',
-    name: 'MPU DEIN PARTNER',
-    redirect: '/mpu-partner'
-  }
-];
+import { findUser } from '@/lib/server/authUsers';
 
 export async function login(username: string, password: string) {
-  const normalizedUsername = username.trim().toUpperCase();
-  const normalizedPassword = password.trim();
-  const user = users.find(
-    u => u.username.toUpperCase() === normalizedUsername && u.password === normalizedPassword
-  );
-  
+  const user = findUser(username, password);
+
   if (user) {
     const session = JSON.stringify({
       username: user.username,
