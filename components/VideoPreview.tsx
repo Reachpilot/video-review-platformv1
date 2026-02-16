@@ -147,20 +147,24 @@ export default function VideoPreview({ isOpen, onClose, video, onUpdate, onDelet
   }, []);
 
   useEffect(() => {
-    if (video?.scheduledDate) {
-      // Format the date for the datetime-local input
+    if (!video || !isOpen) {
+      return;
+    }
+
+    if (video.scheduledDate) {
       const date = new Date(video.scheduledDate);
       const formattedDate = format(date, "yyyy-MM-dd'T'HH:mm");
       setLocalScheduledDate(formattedDate);
     } else {
       setLocalScheduledDate('');
     }
+
     setCorrectionNote('');
     setCorrectionTimestamp('');
-    setLocalTitle(video?.title || '');
-    setLocalDescription(video?.description || '');
+    setLocalTitle(video.title || '');
+    setLocalDescription(video.description || '');
     setMetadataSavedAt(null);
-  }, [video]);
+  }, [video?.id, isOpen]);
 
   if (!video) return null;
 
