@@ -2,12 +2,12 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import { login } from '@/app/actions/auth';
 
 export default function LoginPage() {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
-  const [isSubmitting, setIsSubmitting] = useState(false);
   const router = useRouter();
   
   // Animated gradient background effect
@@ -42,29 +42,15 @@ export default function LoginPage() {
     setError('');
     
     try {
-      setIsSubmitting(true);
-      const response = await fetch('/api/auth/login', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        credentials: 'include',
-        body: JSON.stringify({ username, password }),
-      });
-
-      const result = await response.json();
-      if (!response.ok || !result.success) {
+      const result = await login(username, password);
+      if (result.success) {
+        router.push(result.redirect || '/');
+        router.refresh();
+      } else {
         setError(result.error || 'Anmeldung fehlgeschlagen');
-        return;
       }
-
-      router.push(result.redirect || '/');
-      router.refresh();
     } catch (err) {
-      console.error('Login failed:', err);
       setError('Ein Fehler ist aufgetreten. Bitte versuchen Sie es später erneut.');
-    } finally {
-      setIsSubmitting(false);
     }
   };
 
