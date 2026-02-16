@@ -12,7 +12,7 @@ interface VideoPreviewProps {
   isOpen: boolean;
   onClose: () => void;
   video: Video | null;
-  onUpdate?: (video: Video) => void;
+  onUpdate?: (video: Video) => Promise<Video | void> | Video | void;
   onDelete?: (id: string) => void;
   isMpu?: boolean;
 }
@@ -177,6 +177,13 @@ export default function VideoPreview({ isOpen, onClose, video, onUpdate, onDelet
       return;
     }
 
+    if (!onUpdate) {
+      setLocalTitle(nextTitle);
+      setLocalDescription(nextDescription);
+      setMetadataSavedAt(Date.now());
+      return;
+    }
+
     try {
       setIsSavingMetadata(true);
       const updatedVideo = {
@@ -184,7 +191,9 @@ export default function VideoPreview({ isOpen, onClose, video, onUpdate, onDelet
         title: nextTitle,
         description: nextDescription,
       };
-      await (onUpdate ? Promise.resolve(onUpdate(updatedVideo)) : Promise.resolve());
+      const persisted = (await onUpdate(updatedVideo)) || updatedVideo;
+      setLocalTitle(persisted.title || nextTitle);
+      setLocalDescription(persisted.description ?? nextDescription);
       setMetadataSavedAt(Date.now());
     } catch (error) {
       console.error('Failed to update metadata', error);
