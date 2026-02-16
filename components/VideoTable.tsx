@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { Video } from '@/types';
 import { deleteVideo, saveVideo, updateVideoStatus } from '@/lib/videoService';
 import { format } from 'date-fns';
@@ -104,6 +104,7 @@ import {
 type SortField = 'title' | 'uploadedAt' | 'scheduledDate' | 'status' | 'uploader' | 'duration';
 type SortDirection = 'asc' | 'desc';
 type VideoStatus = 'pending' | 'needs_revision' | 'approved';
+type MetadataOverride = { title: string; description: string };
 
 interface VideoTableProps {
   videos: Video[]
@@ -121,6 +122,87 @@ export default function VideoTable({ videos = [], onVideoUpdated, onVideoDeleted
   const [previewVideo, setPreviewVideo] = useState<Video | null>(null);
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   const videoRefs = useRef<{[key: string]: HTMLVideoElement | null}>({});
+  const overridesStorageKey = useMemo(() => `video-metadata-overrides-${isMpu ? 'mpu' : 'default'}`, [isMpu]);
+  const [metadataOverrides, setMetadataOverrides] = useState<Record<string, MetadataOverride>>({});
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      const stored = window.localStorage.getItem(overridesStorageKey);
+      if (stored) {
+        const parsed = JSON.parse(stored) as Record<string, MetadataOverride>;
+        setMetadataOverrides(parsed);
+      }
+    } catch (error) {
+      console.warn('Failed to load metadata overrides', error);
+    }
+  }, [overridesStorageKey]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      window.localStorage.setItem(overridesStorageKey, JSON.stringify(metadataOverrides));
+    } catch (error) {
+      console.warn('Failed to persist metadata overrides', error);
+    }
+  }, [metadataOverrides, overridesStorageKey]);
+
+  const applyOverrides = useCallback(
+    (video: Video): Video => {
+      const override = metadataOverrides[video.id];
+      if (!override) {
+        return video;
+      }
+      return {
+        ...video,
+        title: override.title,
+        description: override.description,
+      };
+    },
+    [metadataOverrides]
+  );
+
+  const videosWithOverrides = useMemo(() => videos.map(applyOverrides), [videos, applyOverrides]);
+
+  useEffect(() => {
+    if (!previewVideo?.id) return;
+    setPreviewVideo(current => {
+      if (!current) return current;
+      const baseVideo = videos.find(video => video.id === current.id);
+      if (!baseVideo) return current;
+      const merged = applyOverrides(baseVideo);
+      const sameTitle = merged.title === current.title;
+      const sameDescription = (merged.description || '') === (current.description || '');
+      if (sameTitle && sameDescription) {
+        return current;
+      }
+      return merged;
+    });
+  }, [applyOverrides, previewVideo?.id, videos]);
+
+  const handleMetadataOverrideSave = useCallback(
+    (videoId: string, metadata: { title: string; description: string }) => {
+      setMetadataOverrides(prev => {
+        const next = { ...prev };
+        const original = videos.find(video => video.id === videoId);
+        const originalTitle = original?.title?.trim() || '';
+        const originalDescription = original?.description || '';
+        const nextTitle = metadata.title.trim();
+        const nextDescription = metadata.description ?? '';
+        const matchesOriginal = original && originalTitle === nextTitle && originalDescription === nextDescription;
+        if (matchesOriginal) {
+          delete next[videoId];
+        } else {
+          next[videoId] = {
+            title: nextTitle,
+            description: nextDescription,
+          };
+        }
+        return next;
+      });
+    },
+    [videos]
+  );
   
   // Handle status update
   const handleStatusChange = async (id: string, newStatus: 'pending' | 'needs_revision' | 'approved') => {
@@ -145,7 +227,7 @@ export default function VideoTable({ videos = [], onVideoUpdated, onVideoDeleted
       if (onVideoUpdated) {
         onVideoUpdated(persisted);
       }
-      setPreviewVideo(persisted);
+      setPreviewVideo(applyOverrides(persisted));
       return persisted;
     } catch (error) {
       console.error('Error updating video:', error);
@@ -190,7 +272,7 @@ export default function VideoTable({ videos = [], onVideoUpdated, onVideoDeleted
 
   // Apply sorting and filtering
   const sortedAndFilteredVideos = useMemo(() => {
-    return [...videos]
+    return [...videosWithOverrides]
       .filter(video => 
         video.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
         video.uploader.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -218,7 +300,7 @@ export default function VideoTable({ videos = [], onVideoUpdated, onVideoDeleted
         
         return sortDirection === 'asc' ? comparison : -comparison;
       });
-  }, [videos, searchQuery, sortField, sortDirection]);
+  }, [videosWithOverrides, searchQuery, sortField, sortDirection]);
 
   // Status badge component with custom icons
   const StatusBadge = ({ status }: { status: VideoStatus }) => {
@@ -264,7 +346,7 @@ export default function VideoTable({ videos = [], onVideoUpdated, onVideoDeleted
 
   // Filter and sort videos
   const filteredAndSortedVideos = useMemo(() => {
-    let result = [...videos];
+    let result = [...videosWithOverrides];
 
     // Apply status filter
     if (statusFilter !== 'all') {
@@ -327,7 +409,7 @@ export default function VideoTable({ videos = [], onVideoUpdated, onVideoDeleted
     });
 
     return result;
-  }, [videos, statusFilter, searchQuery, sortField, sortDirection]);
+  }, [videosWithOverrides, statusFilter, searchQuery, sortField, sortDirection]);
 
   if (isUpdating) {
     return (
@@ -460,7 +542,7 @@ export default function VideoTable({ videos = [], onVideoUpdated, onVideoDeleted
   
   // Handle preview button click
   const handlePreviewClick = (video: Video) => {
-    setPreviewVideo(video);
+    setPreviewVideo(applyOverrides(video));
     setIsPreviewOpen(true);
   };
 
@@ -473,6 +555,7 @@ export default function VideoTable({ videos = [], onVideoUpdated, onVideoDeleted
           onClose={() => setIsPreviewOpen(false)} 
           video={previewVideo}
           onUpdate={handleVideoUpdate}
+          onMetadataOverrideSave={handleMetadataOverrideSave}
           onDelete={(id) => handleDeleteVideo(id)}
           isMpu={isMpu}
         />

@@ -13,11 +13,20 @@ interface VideoPreviewProps {
   onClose: () => void;
   video: Video | null;
   onUpdate?: (video: Video) => Promise<Video | void> | Video | void;
+  onMetadataOverrideSave?: (videoId: string, metadata: { title: string; description: string }) => void;
   onDelete?: (id: string) => void;
   isMpu?: boolean;
 }
 
-export default function VideoPreview({ isOpen, onClose, video, onUpdate, onDelete, isMpu = false }: VideoPreviewProps) {
+export default function VideoPreview({
+  isOpen,
+  onClose,
+  video,
+  onUpdate,
+  onMetadataOverrideSave,
+  onDelete,
+  isMpu = false,
+}: VideoPreviewProps) {
   const [localScheduledDate, setLocalScheduledDate] = useState<string>('');
   const [isMobile, setIsMobile] = useState(false);
   const [correctionNote, setCorrectionNote] = useState('');
@@ -181,23 +190,11 @@ export default function VideoPreview({ isOpen, onClose, video, onUpdate, onDelet
       return;
     }
 
-    if (!onUpdate) {
-      setLocalTitle(nextTitle);
-      setLocalDescription(nextDescription);
-      setMetadataSavedAt(Date.now());
-      return;
-    }
-
     try {
       setIsSavingMetadata(true);
-      const updatedVideo = {
-        ...video,
-        title: nextTitle,
-        description: nextDescription,
-      };
-      const persisted = (await onUpdate(updatedVideo)) || updatedVideo;
-      setLocalTitle(persisted.title || nextTitle);
-      setLocalDescription(persisted.description ?? nextDescription);
+      onMetadataOverrideSave?.(video.id, { title: nextTitle, description: nextDescription });
+      setLocalTitle(nextTitle);
+      setLocalDescription(nextDescription);
       setMetadataSavedAt(Date.now());
     } catch (error) {
       console.error('Failed to update metadata', error);
