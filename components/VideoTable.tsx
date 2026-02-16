@@ -138,7 +138,7 @@ export default function VideoTable({ videos = [], onVideoUpdated, onVideoDeleted
   };
 
   // Handle video update (for scheduled date, etc.)
-  const handleVideoUpdate = async (updatedVideo: Video) => {
+  const handleVideoUpdate = async (updatedVideo: Video): Promise<Video | undefined> => {
     try {
       setIsUpdating(true);
       const persisted = await saveVideo(updatedVideo, isMpu);
@@ -146,8 +146,10 @@ export default function VideoTable({ videos = [], onVideoUpdated, onVideoDeleted
         onVideoUpdated(persisted);
       }
       setPreviewVideo(persisted);
+      return persisted;
     } catch (error) {
       console.error('Error updating video:', error);
+      return undefined;
     } finally {
       setIsUpdating(false);
     }
