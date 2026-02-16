@@ -526,21 +526,21 @@ export default function VideoTable({ videos = [], onVideoUpdated, onVideoDeleted
                   <th 
                     scope="col" 
                     className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:text-gray-700"
-                    onClick={() => handleSort('title')}
-                  >
-                    <div className="flex items-center">
-                      Title
-                      <SortIndicator field="title" />
-                    </div>
-                  </th>
-                  <th 
-                    scope="col" 
-                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:text-gray-700"
                     onClick={() => handleSort('status')}
                   >
                     <div className="flex items-center">
                       Status
                       <SortIndicator field="status" />
+                    </div>
+                  </th>
+                  <th 
+                    scope="col" 
+                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:text-gray-700"
+                    onClick={() => handleSort('title')}
+                  >
+                    <div className="flex items-center">
+                      Title
+                      <SortIndicator field="title" />
                     </div>
                   </th>
                   <th 
