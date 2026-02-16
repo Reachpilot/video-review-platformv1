@@ -62,6 +62,8 @@ const startCase = value =>
     .map(part => part.charAt(0).toUpperCase() + part.slice(1))
     .join(' ');
 
+const FFMPEG_BIN = process.env.FFMPEG_PATH || process.env.FFMPEG_BIN || 'ffmpeg';
+
 const ensureThumbnail = async (videoPath, thumbnailPath) => {
   const needsRefresh = async () => {
     if (!existsSync(thumbnailPath)) return true;
@@ -76,7 +78,7 @@ const ensureThumbnail = async (videoPath, thumbnailPath) => {
   await ensureDir(path.dirname(thumbnailPath));
 
   await new Promise((resolve, reject) => {
-    const ffmpeg = spawn('ffmpeg', [
+    const ffmpeg = spawn(FFMPEG_BIN, [
       '-y',
       '-i',
       videoPath,
@@ -87,7 +89,17 @@ const ensureThumbnail = async (videoPath, thumbnailPath) => {
       thumbnailPath,
     ]);
 
-    ffmpeg.on('error', reject);
+    ffmpeg.on('error', error => {
+      if (error.code === 'ENOENT') {
+        reject(
+          new Error(
+            `ffmpeg binary not found at "${FFMPEG_BIN}". Install ffmpeg (e.g. via brew install ffmpeg) or set FFMPEG_PATH.`
+          )
+        );
+        return;
+      }
+      reject(error);
+    });
     ffmpeg.on('close', code => {
       if (code === 0) {
         resolve();
