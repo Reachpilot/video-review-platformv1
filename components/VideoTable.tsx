@@ -138,6 +138,8 @@ export default function VideoTable({ videos = [], onVideoUpdated, onVideoDeleted
   const videoRefs = useRef<{[key: string]: HTMLVideoElement | null}>({});
   const overridesStorageKey = useMemo(() => `video-metadata-overrides-${isMpu ? 'mpu' : 'default'}`, [isMpu]);
   const [metadataOverrides, setMetadataOverrides] = useState<Record<string, MetadataOverride>>({});
+  const [statusOverrides, setStatusOverrides] = useState<Record<string, VideoStatus>>({});
+  const [updatingStatusIds, setUpdatingStatusIds] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -163,17 +165,23 @@ export default function VideoTable({ videos = [], onVideoUpdated, onVideoDeleted
 
   const applyOverrides = useCallback(
     (video: Video): Video => {
-      const override = metadataOverrides[video.id];
-      if (!override) {
+      const metadataOverride = metadataOverrides[video.id];
+      const statusOverride = statusOverrides[video.id];
+      if (!metadataOverride && !statusOverride) {
         return video;
       }
       return {
         ...video,
-        title: override.title,
-        description: override.description,
+        ...(metadataOverride
+          ? {
+              title: metadataOverride.title,
+              description: metadataOverride.description,
+            }
+          : {}),
+        ...(statusOverride ? { status: statusOverride } : {}),
       };
     },
-    [metadataOverrides]
+    [metadataOverrides, statusOverrides]
   );
 
   const videosWithOverrides = useMemo(() => videos.map(applyOverrides), [videos, applyOverrides]);
@@ -220,16 +228,33 @@ export default function VideoTable({ videos = [], onVideoUpdated, onVideoDeleted
   
   // Handle status update
   const handleStatusChange = async (id: string, newStatus: VideoStatus) => {
+    setStatusOverrides(prev => ({ ...prev, [id]: newStatus }));
+    setUpdatingStatusIds(prev => ({ ...prev, [id]: true }));
+
     try {
-      setIsUpdating(true);
       const updatedVideo = await updateVideoStatus(id, newStatus, isMpu);
       onVideoUpdated?.(updatedVideo);
+      setStatusOverrides(prev => {
+        const next = { ...prev };
+        delete next[id];
+        return next;
+      });
       return updatedVideo;
     } catch (error) {
       console.error('Error updating video status:', error);
+      alert('Status konnte nicht aktualisiert werden.');
+      setStatusOverrides(prev => {
+        const next = { ...prev };
+        delete next[id];
+        return next;
+      });
       throw error;
     } finally {
-      setIsUpdating(false);
+      setUpdatingStatusIds(prev => {
+        const next = { ...prev };
+        delete next[id];
+        return next;
+      });
     }
   };
 
@@ -698,8 +723,9 @@ export default function VideoTable({ videos = [], onVideoUpdated, onVideoDeleted
                         <td className="px-6 py-4 whitespace-nowrap">
                           <div className="relative w-40">
                               <select
-                                value={video.status}
+                                value={statusOverrides[video.id] ?? video.status}
                                 onChange={(e) => handleStatusChange(video.id, e.target.value as VideoStatus)}
+                                disabled={Boolean(updatingStatusIds[video.id])}
                                 className={`appearance-none block w-full pl-3 pr-8 py-2 text-sm border rounded-md shadow-sm focus:ring-2 focus:ring-offset-2 focus:outline-none transition-all duration-200 ease-in-out cursor-pointer ${getStatusColor(video.status, 'bg')} ${getStatusColor(video.status, 'text')} ${getStatusColor(video.status, 'border')} ${getStatusColor(video.status, 'hover')}`}
                               >
                                 <option value="pending" className="bg-white text-yellow-700">
