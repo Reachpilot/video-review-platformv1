@@ -57,6 +57,19 @@ const requestJson = async <T>(input: RequestInfo, init?: RequestInit): Promise<T
   return (await response.json()) as T;
 };
 
+type VideoBuckets = {
+  default?: Video[];
+  mpu?: Video[];
+};
+
+const fetchStaticVideos = async (): Promise<VideoBuckets> => {
+  const response = await fetch('/uploads/data/videos.json', { cache: 'no-store' });
+  if (!response.ok) {
+    throw new Error('Static videos.json not available');
+  }
+  return (await response.json()) as VideoBuckets;
+};
+
 const updateVideoMetadata = async (id: string, updates: Partial<Video>, isMpu = false) => {
   const payload = {
     id,
@@ -111,9 +124,15 @@ const uploadViaServer = async (
 
 export async function getVideos(isMpu = false): Promise<Video[]> {
   const query = buildQuery({ mpu: isMpu ? 'true' : null, t: Date.now().toString() });
-  return requestJson<Video[]>(withBase(`/api/videos${query}`), {
-    cache: 'no-store',
-  });
+  try {
+    return await requestJson<Video[]>(withBase(`/api/videos${query}`), {
+      cache: 'no-store',
+    });
+  } catch (error) {
+    console.warn('Falling back to static videos.json:', error);
+    const fallback = await fetchStaticVideos();
+    return (isMpu ? fallback.mpu : fallback.default) ?? [];
+  }
 }
 
 export async function uploadVideo(
