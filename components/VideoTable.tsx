@@ -137,6 +137,7 @@ export default function VideoTable({ videos = [], onVideoUpdated, onVideoDeleted
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   const videoRefs = useRef<{[key: string]: HTMLVideoElement | null}>({});
   const overridesStorageKey = useMemo(() => `video-metadata-overrides-${isMpu ? 'mpu' : 'default'}`, [isMpu]);
+  const statusOverridesStorageKey = useMemo(() => `video-status-overrides-${isMpu ? 'mpu' : 'default'}`, [isMpu]);
   const [metadataOverrides, setMetadataOverrides] = useState<Record<string, MetadataOverride>>({});
   const [statusOverrides, setStatusOverrides] = useState<Record<string, VideoStatus>>({});
   const [updatingStatusIds, setUpdatingStatusIds] = useState<Record<string, boolean>>({});
@@ -162,6 +163,28 @@ export default function VideoTable({ videos = [], onVideoUpdated, onVideoDeleted
       console.warn('Failed to persist metadata overrides', error);
     }
   }, [metadataOverrides, overridesStorageKey]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      const stored = window.localStorage.getItem(statusOverridesStorageKey);
+      if (stored) {
+        const parsed = JSON.parse(stored) as Record<string, VideoStatus>;
+        setStatusOverrides(parsed);
+      }
+    } catch (error) {
+      console.warn('Failed to load status overrides', error);
+    }
+  }, [statusOverridesStorageKey]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      window.localStorage.setItem(statusOverridesStorageKey, JSON.stringify(statusOverrides));
+    } catch (error) {
+      console.warn('Failed to persist status overrides', error);
+    }
+  }, [statusOverrides, statusOverridesStorageKey]);
 
   const applyOverrides = useCallback(
     (video: Video): Video => {
@@ -242,13 +265,8 @@ export default function VideoTable({ videos = [], onVideoUpdated, onVideoDeleted
       return updatedVideo;
     } catch (error) {
       console.error('Error updating video status:', error);
-      alert('Status konnte nicht aktualisiert werden.');
-      setStatusOverrides(prev => {
-        const next = { ...prev };
-        delete next[id];
-        return next;
-      });
-      throw error;
+      alert('Status konnte nicht aktualisiert werden. Änderung bleibt nur lokal erhalten.');
+      return undefined;
     } finally {
       setUpdatingStatusIds(prev => {
         const next = { ...prev };
