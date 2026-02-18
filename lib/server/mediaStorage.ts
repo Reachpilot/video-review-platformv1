@@ -58,6 +58,12 @@ const allowBlobStorage = wantsBlobStorage && hasBlobContext;
 export const staticMediaMode = !allowBlobStorage;
 const requiresBlobStorage = wantsBlobStorage;
 const isBlobEnv = allowBlobStorage;
+const dataKeyPrefix = `${MEDIA_ROOT}/data/`;
+const shouldUseBlobForKey = (key: string) => {
+  if (!hasBlobContext) return false;
+  if (isBlobEnv) return true;
+  return key.startsWith(dataKeyPrefix);
+};
 
 const ensureBlobConfigured = () => {
   if (requiresBlobStorage && !isBlobEnv) {
@@ -144,7 +150,9 @@ export const saveMediaAsset = async (
   data: ArrayBuffer | Buffer | Uint8Array,
   contentType?: string
 ) => {
-  if (!isBlobEnv) {
+  const useBlob = shouldUseBlobForKey(key);
+
+  if (!useBlob) {
     const targetPath = join(process.cwd(), 'public', key);
     await ensureLocalDir(targetPath);
     await writeFile(targetPath, toBuffer(data));
@@ -155,7 +163,6 @@ export const saveMediaAsset = async (
     };
   }
 
-  ensureBlobConfigured();
   const store = getMediaStore();
   await store.set(key, toArrayBuffer(data), {
     metadata: {
@@ -175,8 +182,7 @@ export const readMediaAsset = async (key: string) => {
     return null;
   }
 
-  if (isBlobEnv) {
-    ensureBlobConfigured();
+  if (shouldUseBlobForKey(sanitized)) {
     const store = getMediaStore();
     const entry = await store.getWithMetadata(sanitized, { type: 'arrayBuffer' });
     if (!entry?.data) {
@@ -209,8 +215,7 @@ export const readMediaAsset = async (key: string) => {
 export const deleteMediaAsset = async (key: string) => {
   if (!key.startsWith(`${MEDIA_ROOT}/`)) return;
 
-  ensureBlobConfigured();
-  if (isBlobEnv) {
+  if (shouldUseBlobForKey(key)) {
     const store = getMediaStore();
     await store.delete(key);
     return;
