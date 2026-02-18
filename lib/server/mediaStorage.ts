@@ -93,24 +93,6 @@ const contentTypeMap: Record<string, string> = {
 
 const uploadsRoot = join(process.cwd(), 'public', MEDIA_ROOT);
 
-const readLocalAsset = async (key: string) => {
-  const absolutePath = join(process.cwd(), 'public', key);
-  const normalized = normalize(absolutePath);
-  if (!normalized.startsWith(uploadsRoot)) {
-    return null;
-  }
-
-  try {
-    const data = await readFile(normalized);
-    return {
-      data,
-      contentType: guessContentType(key),
-    };
-  } catch (error) {
-    return null;
-  }
-};
-
 type BinaryData = ArrayBuffer | SharedArrayBuffer | Buffer | Uint8Array;
 
 const hasSharedArrayBuffer = typeof SharedArrayBuffer !== 'undefined';
@@ -188,15 +170,6 @@ export const saveMediaAsset = async (
     },
   });
 
-  // Best-effort local write to keep static fallback updated (may fail on read-only FS)
-  try {
-    const targetPath = join(process.cwd(), 'public', key);
-    await ensureLocalDir(targetPath);
-    await writeFile(targetPath, toBuffer(data));
-  } catch (error) {
-    // Ignore if filesystem is read-only
-  }
-
   return {
     key,
     url: mediaUrlFromKey(key),
@@ -212,18 +185,31 @@ export const readMediaAsset = async (key: string) => {
   if (shouldUseBlobForKey(sanitized)) {
     const store = getMediaStore();
     const entry = await store.getWithMetadata(sanitized, { type: 'arrayBuffer' });
-    if (entry?.data) {
-      return {
-        data: Buffer.from(entry.data),
-        contentType: entry.metadata?.contentType || guessContentType(sanitized),
-      };
+    if (!entry?.data) {
+      return null;
     }
 
-    // Fallback to local file if blob entry missing
-    return readLocalAsset(sanitized);
+    return {
+      data: Buffer.from(entry.data),
+      contentType: entry.metadata?.contentType || guessContentType(sanitized),
+    };
   }
 
-  return readLocalAsset(sanitized);
+  const absolutePath = join(process.cwd(), 'public', sanitized);
+  const normalized = normalize(absolutePath);
+  if (!normalized.startsWith(uploadsRoot)) {
+    return null;
+  }
+
+  try {
+    const data = await readFile(normalized);
+    return {
+      data,
+      contentType: guessContentType(sanitized),
+    };
+  } catch (error) {
+    return null;
+  }
 };
 
 export const deleteMediaAsset = async (key: string) => {
@@ -245,6 +231,6 @@ export const deleteMediaAsset = async (key: string) => {
     const { unlink } = await import('fs/promises');
     await unlink(normalized);
   } catch (error) {
-    // Ignore missing files or read-only FS
+    // Ignore missing files
   }
 };
