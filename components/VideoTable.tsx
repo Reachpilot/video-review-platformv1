@@ -242,13 +242,12 @@ export default function VideoTable({ videos = [], onVideoUpdated, onVideoDeleted
       return updatedVideo;
     } catch (error) {
       console.error('Error updating video status:', error);
-      alert('Status konnte nicht aktualisiert werden.');
       setStatusOverrides(prev => {
         const next = { ...prev };
         delete next[id];
         return next;
       });
-      throw error;
+      return undefined;
     } finally {
       setUpdatingStatusIds(prev => {
         const next = { ...prev };

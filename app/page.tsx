@@ -34,7 +34,16 @@ export default function Home() {
     pending: videos.filter(v => v.status === 'pending').length,
     needs_revision: videos.filter(v => v.status === 'needs_revision').length,
     approved: videos.filter(v => v.status === 'approved').length,
+    uploaded: videos.filter(v => v.status === 'uploaded').length,
   };
+
+  const statCards = [
+    { name: 'Total Videos', value: stats.total, color: 'bg-blue-500' },
+    { name: 'Pending Review', value: stats.pending, color: 'bg-yellow-500' },
+    { name: 'Needs Revision', value: stats.needs_revision, color: 'bg-orange-500' },
+    { name: 'Approved', value: stats.approved, color: 'bg-green-500' },
+    { name: 'Uploaded', value: stats.uploaded, color: 'bg-purple-500' },
+  ];
 
   return (
     <div className="min-h-full">
@@ -100,21 +109,12 @@ export default function Home() {
       {/* Main content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
         {/* Stats */}
-        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4 mb-8">
-          {[
-            { name: 'Total Videos', value: stats.total, status: 'total' },
-            { name: 'Pending Review', value: stats.pending, status: 'pending' },
-            { name: 'Needs Revision', value: stats.needs_revision, status: 'needs_revision' },
-            { name: 'Approved', value: stats.approved, status: 'approved' },
-          ].map((stat) => (
+        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-5 mb-8">
+          {statCards.map((stat) => (
             <div key={stat.name} className="bg-white overflow-hidden shadow rounded-lg">
               <div className="px-4 py-5 sm:p-6">
                 <div className="flex items-center">
-                  <div className={`flex-shrink-0 rounded-md p-3 ${
-                    stat.status === 'total' ? 'bg-blue-500' :
-                    stat.status === 'pending' ? 'bg-yellow-500' :
-                    stat.status === 'needs_revision' ? 'bg-orange-500' : 'bg-green-500'
-                  }`}>
+                  <div className={`flex-shrink-0 rounded-md p-3 ${stat.color}`}>
                     <CloudArrowUpIcon className="h-6 w-6 text-white" />
                   </div>
                   <div className="ml-5 w-0 flex-1">
