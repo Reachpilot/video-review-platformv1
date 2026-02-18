@@ -53,16 +53,10 @@ const manualBlobOptions: ManualBlobOptions | undefined =
     : undefined;
 
 const hasBlobContext = Boolean(netlifyContext || manualBlobOptions);
-const blobPreference = process.env.USE_BLOB_STORAGE;
-const wantsBlobStorage =
-  blobPreference === 'true'
-    ? true
-    : blobPreference === 'false'
-    ? false
-    : hasBlobContext;
+const wantsBlobStorage = process.env.USE_BLOB_STORAGE === 'true';
 const allowBlobStorage = wantsBlobStorage && hasBlobContext;
 export const staticMediaMode = !allowBlobStorage;
-const requiresBlobStorage = blobPreference === 'true';
+const requiresBlobStorage = wantsBlobStorage;
 const isBlobEnv = allowBlobStorage;
 
 const ensureBlobConfigured = () => {
