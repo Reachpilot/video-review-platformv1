@@ -250,24 +250,15 @@ const persistStore = async (store: VideoStore) => {
 };
 
 const loadStore = async (): Promise<VideoStore> => {
-  // Try static file first for reliable data
-  const staticAsset = await readMediaAsset(DATA_FILE_KEY, true);
-  if (staticAsset?.data) {
-    const parsed = parseStore(staticAsset.data);
-    return syncStoreWithFilesystem(parsed);
+  const asset = await readMediaAsset(DATA_FILE_KEY);
+  if (!asset?.data) {
+    const initial = getInitialStore();
+    await persistStore(initial);
+    return syncStoreWithFilesystem(initial);
   }
 
-  // Fallback to blob
-  const blobAsset = await readMediaAsset(DATA_FILE_KEY);
-  if (blobAsset?.data) {
-    const parsed = parseStore(blobAsset.data);
-    return syncStoreWithFilesystem(parsed);
-  }
-
-  // No existing data, create initial and sync
-  const initial = getInitialStore();
-  await persistStore(initial);
-  return syncStoreWithFilesystem(initial);
+  const parsed = parseStore(asset.data);
+  return syncStoreWithFilesystem(parsed);
 };
 
 const normalizeSegment = (segment?: string | null): VideoSegment => (segment === 'mpu' ? 'mpu' : 'default');
