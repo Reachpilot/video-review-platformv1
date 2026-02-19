@@ -265,7 +265,9 @@ const normalizeSegment = (segment?: string | null): VideoSegment => (segment ===
 
 export const listVideos = async (segment: VideoSegment = 'default') => {
   const store = await loadStore();
-  return store[segment];
+  return [...store[segment]].sort(
+    (a, b) => new Date(b.uploadedAt).getTime() - new Date(a.uploadedAt).getTime()
+  );
 };
 
 export const upsertVideoRecord = async (video: Video, segment: VideoSegment = 'default') => {
