@@ -168,6 +168,10 @@ const syncStoreWithFilesystem = async (store: VideoStore): Promise<VideoStore> =
     const existing = existingByFile.get(fileName);
     const metadata = await buildVideoRecord(fileName);
     if (existing) {
+      const durationFallback = metadata.duration && metadata.duration !== '00:00' ? metadata.duration : existing.duration;
+      const sizeFallback = metadata.size && metadata.size !== '0 B' ? metadata.size : existing.size;
+      const uploadedAtFallback = existing.uploadedAt || metadata.uploadedAt;
+
       const merged = {
         ...existing,
         fileName: existing.fileName || metadata.fileName,
@@ -176,9 +180,9 @@ const syncStoreWithFilesystem = async (store: VideoStore): Promise<VideoStore> =
           existing.thumbnailUrl && existing.thumbnailUrl !== DEFAULT_THUMBNAIL
             ? existing.thumbnailUrl
             : metadata.thumbnailUrl,
-        duration: metadata.duration,
-        size: metadata.size,
-        uploadedAt: existing.uploadedAt || metadata.uploadedAt,
+        duration: durationFallback || metadata.duration,
+        size: sizeFallback || metadata.size,
+        uploadedAt: uploadedAtFallback,
         description: existing.description ?? metadata.description,
         uploader: existing.uploader || metadata.uploader,
         comments: existing.comments || metadata.comments,
