@@ -26,4 +26,11 @@ export interface Video {
   cloudinaryFormat?: string;
 }
 
-export type VideoStatus = Video['status'];
+export const VIDEO_STATUS_OPTIONS = [
+  { value: 'pending', label: 'Pending' },
+  { value: 'needs_revision', label: 'Needs Revision' },
+  { value: 'approved', label: 'Approved' },
+  { value: 'uploaded', label: 'Uploaded' },
+] as const;
+
+export type VideoStatus = typeof VIDEO_STATUS_OPTIONS[number]['value'];

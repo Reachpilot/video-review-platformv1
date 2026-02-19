@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { Video } from '@/types';
+import { VIDEO_STATUS_OPTIONS } from '@/types';
 import { deleteVideo, saveVideo, updateVideoStatus } from '@/lib/videoService';
 import { format } from 'date-fns';
 import VideoPreview from './VideoPreview';
@@ -709,30 +710,14 @@ export default function VideoTable({ videos = [], onVideoUpdated, onVideoDeleted
                                 disabled={Boolean(updatingStatusIds[video.id])}
                                 className={`appearance-none block w-full pl-3 pr-8 py-2 text-sm border rounded-md shadow-sm focus:ring-2 focus:ring-offset-2 focus:outline-none transition-all duration-200 ease-in-out cursor-pointer ${getStatusColor(video.status, 'bg')} ${getStatusColor(video.status, 'text')} ${getStatusColor(video.status, 'border')} ${getStatusColor(video.status, 'hover')}`}
                               >
-                                <option value="pending" className="bg-white text-yellow-700">
-                                  <div className="flex items-center">
-                                    {StatusIcons.pending}
-                                    <span>Pending</span>
-                                  </div>
-                                </option>
-                                <option value="needs_revision" className="bg-white text-red-700">
-                                  <div className="flex items-center">
-                                    {StatusIcons.needs_revision}
-                                    <span>Needs Revision</span>
-                                  </div>
-                                </option>
-                                <option value="approved" className="bg-white text-green-700">
-                                  <div className="flex items-center">
-                                    {StatusIcons.approved}
-                                    <span>Approved</span>
-                                  </div>
-                                </option>
-                                <option value="uploaded" className="bg-white text-purple-700">
-                                  <div className="flex items-center">
-                                    {StatusIcons.uploaded}
-                                    <span>Uploaded</span>
-                                  </div>
-                                </option>
+                                {VIDEO_STATUS_OPTIONS.map(option => (
+                                  <option key={option.value} value={option.value} className="bg-white text-gray-700">
+                                    <div className="flex items-center">
+                                      {StatusIcons[option.value as keyof typeof StatusIcons]}
+                                      <span>{option.label}</span>
+                                    </div>
+                                  </option>
+                                ))}
                               </select>
                             <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2">
                               <svg className="fill-current h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20">
