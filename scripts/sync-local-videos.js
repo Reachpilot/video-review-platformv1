@@ -142,7 +142,7 @@ const discoverVideoFiles = async () => {
   }
 };
 
-const buildVideoRecord = async entry => {
+const buildVideoRecord = async (entry, existingVideo) => {
   const absoluteVideoPath = path.join(VIDEOS_DIR, entry.name);
   const slug = slugify(entry.name.replace(path.extname(entry.name), ''));
   const thumbFilename = `${slug}.jpg`;
@@ -162,22 +162,26 @@ const buildVideoRecord = async entry => {
     console.warn(`Failed to read duration for ${entry.name}:`, error.message);
   }
 
+  if (durationLabel === '00:00' && existingVideo?.duration && existingVideo.duration !== '00:00') {
+    durationLabel = existingVideo.duration;
+  }
+
   const stats = await fs.stat(absoluteVideoPath);
   const relativeVideoKey = path.posix.join('uploads', 'videos', entry.name);
   const relativeThumbnailKey = path.posix.join('uploads', 'videos', 'thumbnails', thumbFilename);
 
   return {
-    id: `vid-${slug}`,
+    id: existingVideo?.id || `vid-${slug}`,
     title: startCase(slug) || entry.name,
     description: '',
     fileName: entry.name,
     filePath: mediaUrlFromKey(relativeVideoKey),
     thumbnailUrl: mediaUrlFromKey(relativeThumbnailKey),
     status: DEFAULT_STATUS,
-    uploadedAt: stats.mtime.toISOString(),
+    uploadedAt: existingVideo?.uploadedAt || stats.mtime.toISOString(),
     duration: durationLabel,
-    size: formatBytes(stats.size),
-    uploader: DEFAULT_UPLOADER,
+    size: existingVideo?.size || formatBytes(stats.size),
+    uploader: existingVideo?.uploader || DEFAULT_UPLOADER,
     comments: [],
   };
 };
@@ -193,7 +197,8 @@ async function main() {
     return;
   }
 
-  const videos = await Promise.all(entries.map(buildVideoRecord));
+  const existingByFile = new Map((existingStore.default || []).map(video => [video.fileName, video]));
+  const videos = await Promise.all(entries.map(entry => buildVideoRecord(entry, existingByFile.get(entry.name))));
   videos.sort((a, b) => new Date(b.uploadedAt).getTime() - new Date(a.uploadedAt).getTime());
 
   const store = {
