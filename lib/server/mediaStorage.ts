@@ -204,10 +204,14 @@ export const saveMediaAsset = async (
   };
 };
 
-export const readMediaAsset = async (key: string) => {
+export const readMediaAsset = async (key: string, forceStatic: boolean = false) => {
   const sanitized = key.replace(/\\/g, '/');
   if (!sanitized.startsWith(`${MEDIA_ROOT}/`)) {
     return null;
+  }
+
+  if (forceStatic) {
+    return readLocalAsset(sanitized);
   }
 
   if (shouldUseBlobForKey(sanitized)) {
