@@ -270,12 +270,11 @@ const loadStore = async (): Promise<VideoStore> => {
         for (const video of blobVideos) {
           const staticVideo = staticMap.get(video.id);
           if (staticVideo) {
-            // Update duration if static has better (not '00:00')
-            if (staticVideo.duration && staticVideo.duration !== '00:00' && (!video.duration || video.duration === '00:00')) {
+            // Always update metadata from static for correctness
+            if (staticVideo.duration) {
               video.duration = staticVideo.duration;
             }
-            // Update uploadedAt if static has better (not default)
-            if (staticVideo.uploadedAt && staticVideo.uploadedAt !== '1970-01-01T00:00:00.000Z' && (!video.uploadedAt || video.uploadedAt === '1970-01-01T00:00:00.000Z' || video.uploadedAt === '1980-01-01T00:00:00.000Z')) {
+            if (staticVideo.uploadedAt) {
               video.uploadedAt = staticVideo.uploadedAt;
             }
           }
