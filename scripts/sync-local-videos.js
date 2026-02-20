@@ -155,15 +155,15 @@ const buildVideoRecord = async (entry, existingVideo) => {
   }
 
   let durationLabel = '00:00';
-  try {
-    const seconds = await getVideoDurationInSeconds(absoluteVideoPath);
-    durationLabel = formatDuration(seconds);
-  } catch (error) {
-    console.warn(`Failed to read duration for ${entry.name}:`, error.message);
-  }
-
-  if (durationLabel === '00:00' && existingVideo?.duration && existingVideo.duration !== '00:00') {
+  if (existingVideo?.duration && existingVideo.duration !== '00:00') {
     durationLabel = existingVideo.duration;
+  } else {
+    try {
+      const seconds = await getVideoDurationInSeconds(absoluteVideoPath);
+      durationLabel = formatDuration(seconds);
+    } catch (error) {
+      console.warn(`Failed to read duration for ${entry.name}:`, error.message);
+    }
   }
 
   const stats = await fs.stat(absoluteVideoPath);
