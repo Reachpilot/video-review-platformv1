@@ -3,15 +3,15 @@
  * Synchronizes all videos stored under public/uploads/videos into
  * public/uploads/data/videos.json and generates thumbnails via ffmpeg.
  */
-const fs = require('fs/promises');
-import { readFileSync, writeFile } from 'fs/promises';
+import fs from 'fs/promises';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { getVideoDurationInSeconds } from 'get-video-duration';
-import { exec } from 'child_process';
+import { spawn } from 'child_process';
 import { promisify } from 'util';
-import startCase from 'lodash/startCase.js';
-import { saveMediaAsset } from '../lib/server/mediaStorage.js';
+import { existsSync } from 'fs';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const ROOT = path.join(__dirname, '..');
 const UPLOADS_ROOT = path.join(ROOT, 'public', 'uploads');
@@ -208,14 +208,6 @@ async function main() {
 
   await fs.writeFile(DATA_FILE, JSON.stringify(store, null, 2));
   console.log(`Synced ${videos.length} video(s) to ${path.relative(ROOT, DATA_FILE)}`);
-
-  // Also update blob storage if available
-  try {
-    await saveMediaAsset('uploads/data/videos.json', Buffer.from(JSON.stringify(store, null, 2)), 'application/json');
-    console.log('Updated blob storage with synced data');
-  } catch (error) {
-    console.warn('Failed to update blob storage:', error.message);
-  }
 }
 
 main().catch(error => {

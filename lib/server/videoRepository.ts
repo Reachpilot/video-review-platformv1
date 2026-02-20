@@ -250,13 +250,21 @@ const persistStore = async (store: VideoStore) => {
 };
 
 const loadStore = async (): Promise<VideoStore> => {
+  try {
+    const asset = await readMediaAsset(DATA_FILE_KEY, true); // force read from static
+    if (asset?.data) {
+      const parsed = parseStore(asset.data);
+      return syncStoreWithFilesystem(parsed);
+    }
+  } catch (error) {
+    // ignore, fallback to blob
+  }
   const asset = await readMediaAsset(DATA_FILE_KEY);
   if (!asset?.data) {
     const initial = getInitialStore();
     await persistStore(initial);
     return syncStoreWithFilesystem(initial);
   }
-
   const parsed = parseStore(asset.data);
   return syncStoreWithFilesystem(parsed);
 };
