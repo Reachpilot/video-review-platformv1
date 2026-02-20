@@ -1,13 +1,12 @@
-import { readdir, stat } from 'fs/promises';
+import type { Video, VideoStatus } from '../../types/index.ts';
 import { existsSync } from 'fs';
+import { readdir, stat } from 'fs/promises';
 import { join, extname, basename } from 'path';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
 import ffprobe from 'ffprobe-static';
-
-import { Video } from '@/types';
-import { DEFAULT_THUMBNAIL } from '@/lib/placeholders';
 import { mediaKey, mediaUrlFromKey, readMediaAsset, saveMediaAsset } from './mediaStorage';
+import { DEFAULT_THUMBNAIL } from '../../lib/placeholders';
 
 export type VideoSegment = 'default' | 'mpu';
 
@@ -250,44 +249,14 @@ const persistStore = async (store: VideoStore) => {
 };
 
 const loadStore = async (): Promise<VideoStore> => {
-  const blobAsset = await readMediaAsset(DATA_FILE_KEY);
-  if (!blobAsset?.data) {
+  const asset = await readMediaAsset(DATA_FILE_KEY);
+  if (!asset?.data) {
     const initial = getInitialStore();
     await persistStore(initial);
     return syncStoreWithFilesystem(initial);
   }
-  const blobStore = parseStore(blobAsset.data);
-
-  // Merge correct metadata from static to blob, preserving blob's status
-  try {
-    const staticAsset = await readMediaAsset(DATA_FILE_KEY, true);
-    if (staticAsset?.data) {
-      const staticStore = parseStore(staticAsset.data);
-      for (const segment of ['default', 'mpu'] as const) {
-        const blobVideos = blobStore[segment];
-        const staticVideos = staticStore[segment] || [];
-        const staticMap = new Map(staticVideos.map(v => [v.id, v]));
-        for (const video of blobVideos) {
-          const staticVideo = staticMap.get(video.id);
-          if (staticVideo) {
-            // Always update metadata from static for correctness
-            if (staticVideo.duration) {
-              video.duration = staticVideo.duration;
-            }
-            if (staticVideo.uploadedAt) {
-              video.uploadedAt = staticVideo.uploadedAt;
-            }
-          }
-        }
-      }
-    }
-  } catch (error) {
-    // Ignore static load/merge errors
-  }
-
-  // Persist merged store to blob
-  await persistStore(blobStore);
-  return syncStoreWithFilesystem(blobStore);
+  const parsed = parseStore(asset.data);
+  return syncStoreWithFilesystem(parsed);
 };
 
 const normalizeSegment = (segment?: string | null): VideoSegment => (segment === 'mpu' ? 'mpu' : 'default');
@@ -303,6 +272,31 @@ export const upsertVideoRecord = async (video: Video, segment: VideoSegment = 'd
   const store = await loadStore();
   const filtered = store[segment].filter(existing => existing.id !== video.id);
   store[segment] = [video, ...filtered];
+  await persistStore(store);
+  return video;
+};
+
+export const updateVideoStatus = async (id: string, status: VideoStatus): Promise<Video> => {
+  const store = await loadStore();
+  const video = store.default.find(v => v.id === id);
+  if (!video) throw new Error('Video not found');
+  video.status = status;
+
+  // Update metadata from static for correctness
+  try {
+    const staticAsset = await readMediaAsset(DATA_FILE_KEY, true);
+    if (staticAsset?.data) {
+      const staticStore = parseStore(staticAsset.data);
+      const staticVideo = staticStore.default.find(v => v.id === id);
+      if (staticVideo) {
+        if (staticVideo.duration) video.duration = staticVideo.duration;
+        if (staticVideo.uploadedAt) video.uploadedAt = staticVideo.uploadedAt;
+      }
+    }
+  } catch (error) {
+    // Ignore static update errors
+  }
+
   await persistStore(store);
   return video;
 };
