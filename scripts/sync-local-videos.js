@@ -158,7 +158,7 @@ const buildVideoRecord = async (entry, existingVideo) => {
     console.warn(`Failed to generate thumbnail for ${entry.name}:`, error.message);
   }
 
-  let durationLabel = '00:00';
+  let durationLabel = existingVideo?.duration || '00:00';
   try {
     const seconds = await getVideoDurationInSeconds(absoluteVideoPath);
     durationLabel = formatDuration(seconds);
