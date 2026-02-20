@@ -4,10 +4,14 @@
  * public/uploads/data/videos.json and generates thumbnails via ffmpeg.
  */
 const fs = require('fs/promises');
-const { existsSync } = require('fs');
-const path = require('path');
-const { spawn } = require('child_process');
-const { getVideoDurationInSeconds } = require('get-video-duration');
+import { readFileSync, writeFile } from 'fs/promises';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import { getVideoDurationInSeconds } from 'get-video-duration';
+import { exec } from 'child_process';
+import { promisify } from 'util';
+import startCase from 'lodash/startCase.js';
+import { saveMediaAsset } from '../lib/server/mediaStorage.js';
 
 const ROOT = path.join(__dirname, '..');
 const UPLOADS_ROOT = path.join(ROOT, 'public', 'uploads');
@@ -155,15 +159,11 @@ const buildVideoRecord = async (entry, existingVideo) => {
   }
 
   let durationLabel = '00:00';
-  if (existingVideo?.duration && existingVideo.duration !== '00:00') {
-    durationLabel = existingVideo.duration;
-  } else {
-    try {
-      const seconds = await getVideoDurationInSeconds(absoluteVideoPath);
-      durationLabel = formatDuration(seconds);
-    } catch (error) {
-      console.warn(`Failed to read duration for ${entry.name}:`, error.message);
-    }
+  try {
+    const seconds = await getVideoDurationInSeconds(absoluteVideoPath);
+    durationLabel = formatDuration(seconds);
+  } catch (error) {
+    console.warn(`Failed to read duration for ${entry.name}:`, error.message);
   }
 
   const stats = await fs.stat(absoluteVideoPath);
@@ -172,17 +172,17 @@ const buildVideoRecord = async (entry, existingVideo) => {
 
   return {
     id: existingVideo?.id || `vid-${slug}`,
-    title: startCase(slug) || entry.name,
-    description: '',
+    title: existingVideo?.title || startCase(slug) || entry.name,
+    description: existingVideo?.description || '',
     fileName: entry.name,
     filePath: mediaUrlFromKey(relativeVideoKey),
     thumbnailUrl: mediaUrlFromKey(relativeThumbnailKey),
-    status: DEFAULT_STATUS,
-    uploadedAt: existingVideo?.uploadedAt || stats.mtime.toISOString(),
+    status: existingVideo?.status || DEFAULT_STATUS,
+    uploadedAt: stats.mtime.toISOString(),
     duration: durationLabel,
     size: existingVideo?.size || formatBytes(stats.size),
     uploader: existingVideo?.uploader || DEFAULT_UPLOADER,
-    comments: [],
+    comments: existingVideo?.comments || [],
   };
 };
 
@@ -208,6 +208,14 @@ async function main() {
 
   await fs.writeFile(DATA_FILE, JSON.stringify(store, null, 2));
   console.log(`Synced ${videos.length} video(s) to ${path.relative(ROOT, DATA_FILE)}`);
+
+  // Also update blob storage if available
+  try {
+    await saveMediaAsset('uploads/data/videos.json', Buffer.from(JSON.stringify(store, null, 2)), 'application/json');
+    console.log('Updated blob storage with synced data');
+  } catch (error) {
+    console.warn('Failed to update blob storage:', error.message);
+  }
 }
 
 main().catch(error => {
