@@ -250,23 +250,45 @@ const persistStore = async (store: VideoStore) => {
 };
 
 const loadStore = async (): Promise<VideoStore> => {
-  try {
-    const asset = await readMediaAsset(DATA_FILE_KEY, true); // force read from static
-    if (asset?.data) {
-      const parsed = parseStore(asset.data);
-      return syncStoreWithFilesystem(parsed);
-    }
-  } catch (error) {
-    // ignore, fallback to blob
-  }
-  const asset = await readMediaAsset(DATA_FILE_KEY);
-  if (!asset?.data) {
+  const blobAsset = await readMediaAsset(DATA_FILE_KEY);
+  if (!blobAsset?.data) {
     const initial = getInitialStore();
     await persistStore(initial);
     return syncStoreWithFilesystem(initial);
   }
-  const parsed = parseStore(asset.data);
-  return syncStoreWithFilesystem(parsed);
+  const blobStore = parseStore(blobAsset.data);
+
+  // Merge correct metadata from static to blob, preserving blob's status
+  try {
+    const staticAsset = await readMediaAsset(DATA_FILE_KEY, true);
+    if (staticAsset?.data) {
+      const staticStore = parseStore(staticAsset.data);
+      for (const segment of ['default', 'mpu'] as const) {
+        const blobVideos = blobStore[segment];
+        const staticVideos = staticStore[segment] || [];
+        const staticMap = new Map(staticVideos.map(v => [v.id, v]));
+        for (const video of blobVideos) {
+          const staticVideo = staticMap.get(video.id);
+          if (staticVideo) {
+            // Update duration if static has better (not '00:00')
+            if (staticVideo.duration && staticVideo.duration !== '00:00' && (!video.duration || video.duration === '00:00')) {
+              video.duration = staticVideo.duration;
+            }
+            // Update uploadedAt if static has better (not default)
+            if (staticVideo.uploadedAt && staticVideo.uploadedAt !== '1970-01-01T00:00:00.000Z' && (!video.uploadedAt || video.uploadedAt === '1970-01-01T00:00:00.000Z' || video.uploadedAt === '1980-01-01T00:00:00.000Z')) {
+              video.uploadedAt = staticVideo.uploadedAt;
+            }
+          }
+        }
+      }
+    }
+  } catch (error) {
+    // Ignore static load/merge errors
+  }
+
+  // Persist merged store to blob
+  await persistStore(blobStore);
+  return syncStoreWithFilesystem(blobStore);
 };
 
 const normalizeSegment = (segment?: string | null): VideoSegment => (segment === 'mpu' ? 'mpu' : 'default');
