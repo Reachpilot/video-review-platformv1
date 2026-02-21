@@ -221,36 +221,8 @@ const loadStore = async (): Promise<VideoStore> => {
     await persistStore(initial);
     return initial;
   }
-  const store = parseStore(asset.data);
-
-  // Merge correct metadata from static for all videos, preserving status
-  try {
-    const staticAsset = await readMediaAsset(DATA_FILE_KEY, true);
-    if (staticAsset?.data) {
-      const staticStore = parseStore(staticAsset.data);
-      for (const segment of ['default', 'mpu'] as const) {
-        const videos = store[segment];
-        const staticVideos = staticStore[segment] || [];
-        const staticMap = new Map(staticVideos.map(v => [v.id, v]));
-        for (const video of videos) {
-          const staticVideo = staticMap.get(video.id);
-          if (staticVideo) {
-            // Update metadata from static
-            if (staticVideo.duration) {
-              video.duration = staticVideo.duration;
-            }
-            if (staticVideo.uploadedAt) {
-              video.uploadedAt = staticVideo.uploadedAt;
-            }
-          }
-        }
-      }
-    }
-  } catch (error) {
-    // Ignore merge errors
-  }
-
-  return store;
+  const parsed = parseStore(asset.data);
+  return parsed;
 };
 
 const normalizeSegment = (segment?: string | null): VideoSegment => (segment === 'mpu' ? 'mpu' : 'default');
