@@ -14,7 +14,7 @@ import { existsSync } from 'fs';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const ROOT = path.join(__dirname, '..');
-const UPLOADS_ROOT = path.join(ROOT, 'public', 'uploads');
+const UPLOADS_ROOT = path.join(ROOT, 'uploads');
 const VIDEOS_DIR = path.join(UPLOADS_ROOT, 'videos');
 const THUMBS_DIR = path.join(VIDEOS_DIR, 'thumbnails');
 const DATA_DIR = path.join(UPLOADS_ROOT, 'data');

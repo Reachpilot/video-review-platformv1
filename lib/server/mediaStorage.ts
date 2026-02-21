@@ -94,21 +94,30 @@ const contentTypeMap: Record<string, string> = {
 const uploadsRoot = join(process.cwd(), 'public', MEDIA_ROOT);
 
 const readLocalAsset = async (key: string) => {
-  const absolutePath = join(process.cwd(), 'public', key);
-  const normalized = normalize(absolutePath);
-  if (!normalized.startsWith(uploadsRoot)) {
-    return null;
+  const pathsToCheck = [
+    join(process.cwd(), 'public', key),
+    join(process.cwd(), key),
+  ];
+
+  for (const absolutePath of pathsToCheck) {
+    const normalized = normalize(absolutePath);
+    // Allow reading from public/uploads or uploads
+    if (!normalized.startsWith(join(process.cwd(), 'public', MEDIA_ROOT)) && !normalized.startsWith(join(process.cwd(), MEDIA_ROOT))) {
+      continue;
+    }
+
+    try {
+      const data = await readFile(normalized);
+      return {
+        data,
+        contentType: guessContentType(key),
+      };
+    } catch (error) {
+      // Continue to next path
+    }
   }
 
-  try {
-    const data = await readFile(normalized);
-    return {
-      data,
-      contentType: guessContentType(key),
-    };
-  } catch (error) {
-    return null;
-  }
+  return null;
 };
 
 type BinaryData = ArrayBuffer | SharedArrayBuffer | Buffer | Uint8Array;
@@ -147,7 +156,7 @@ export const mediaKey = (...segments: string[]) => {
   return [MEDIA_ROOT, ...cleanSegments].join('/');
 };
 
-export const mediaUrlFromKey = (key: string) => (staticMediaMode ? `/${key}` : `/api/media/${key}`);
+export const mediaUrlFromKey = (key: string) => `/api/media/${key}`;
 
 export const guessContentType = (key: string) => {
   const extMatch = key.split('.').pop()?.toLowerCase();
