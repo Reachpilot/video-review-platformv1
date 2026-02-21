@@ -10,13 +10,11 @@ import { getVideoDurationInSeconds } from 'get-video-duration';
 import { spawn } from 'child_process';
 import { promisify } from 'util';
 import { existsSync } from 'fs';
-import { put } from '@vercel/blob';
-import { isBlobStorageEnabled } from '../lib/server/mediaStorage.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const ROOT = path.join(__dirname, '..');
-const UPLOADS_ROOT = path.join(ROOT, 'uploads');
+const UPLOADS_ROOT = path.join(ROOT, 'public', 'uploads');
 const VIDEOS_DIR = path.join(UPLOADS_ROOT, 'videos');
 const THUMBS_DIR = path.join(VIDEOS_DIR, 'thumbnails');
 const DATA_DIR = path.join(UPLOADS_ROOT, 'data');
@@ -172,26 +170,13 @@ const buildVideoRecord = async (entry, existingVideo) => {
   const relativeVideoKey = path.posix.join('uploads', 'videos', entry.name);
   const relativeThumbnailKey = path.posix.join('uploads', 'videos', 'thumbnails', thumbFilename);
 
-  let filePathUrl = mediaUrlFromKey(relativeVideoKey);
-  let thumbnailUrlVal = mediaUrlFromKey(relativeThumbnailKey);
-
-  if (isBlobStorageEnabled()) {
-    const videoData = await fs.readFile(absoluteVideoPath);
-    const videoBlob = await put(relativeVideoKey, videoData, { access: 'public' });
-    filePathUrl = videoBlob.url;
-
-    const thumbData = await fs.readFile(absoluteThumbnailPath);
-    const thumbBlob = await put(relativeThumbnailKey, thumbData, { access: 'public' });
-    thumbnailUrlVal = thumbBlob.url;
-  }
-
   return {
     id: existingVideo?.id || `vid-${slug}`,
     title: existingVideo?.title || startCase(slug) || entry.name,
     description: existingVideo?.description || '',
     fileName: entry.name,
-    filePath: filePathUrl,
-    thumbnailUrl: thumbnailUrlVal,
+    filePath: mediaUrlFromKey(relativeVideoKey),
+    thumbnailUrl: mediaUrlFromKey(relativeThumbnailKey),
     status: existingVideo?.status || DEFAULT_STATUS,
     uploadedAt: stats.mtime.toISOString(),
     duration: durationLabel,
