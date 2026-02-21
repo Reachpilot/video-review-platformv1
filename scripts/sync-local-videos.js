@@ -7,7 +7,7 @@ import fs from 'fs/promises';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { getVideoDurationInSeconds } from 'get-video-duration';
-import { spawn } from 'child_process';
+import { spawn, execSync } from 'child_process';
 import { promisify } from 'util';
 import { existsSync } from 'fs';
 
@@ -208,6 +208,15 @@ async function main() {
 
   await fs.writeFile(DATA_FILE, JSON.stringify(store, null, 2));
   console.log(`Synced ${videos.length} video(s) to ${path.relative(ROOT, DATA_FILE)}`);
+
+  try {
+    execSync('git add public/uploads/data/videos.json public/uploads/videos/ public/uploads/videos/thumbnails/', { cwd: ROOT });
+    execSync('git commit -m "Sync local videos"', { cwd: ROOT });
+    execSync('git push', { cwd: ROOT });
+    console.log('Committed and pushed to GitHub');
+  } catch (error) {
+    console.warn('Failed to commit and push:', error.message);
+  }
 }
 
 main().catch(error => {
