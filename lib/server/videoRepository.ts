@@ -80,32 +80,6 @@ const readVideoDirectory = async (): Promise<FileListResult> => {
   }
 };
 
-const execFileAsync = promisify(execFile);
-
-const probeDurationSeconds = async (absolutePath: string) => {
-  const ffprobePath = typeof ffprobe === 'string' ? ffprobe : (ffprobe as { path?: string } | undefined)?.path;
-  if (!ffprobePath) {
-    throw new Error('ffprobe binary not available');
-  }
-
-  const args = [
-    '-v',
-    'error',
-    '-show_entries',
-    'format=duration',
-    '-of',
-    'default=noprint_wrappers=1:nokey=1',
-    absolutePath,
-  ];
-
-  const { stdout } = await execFileAsync(ffprobePath, args);
-  const seconds = parseFloat(String(stdout).trim());
-  if (!Number.isFinite(seconds)) {
-    throw new Error('Invalid duration output');
-  }
-  return seconds;
-};
-
 const getDurationLabel = async (absolutePath: string) => {
   // Skip duration probing in API to reduce bundle size
   return '00:00';
