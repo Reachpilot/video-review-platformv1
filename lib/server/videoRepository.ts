@@ -2,9 +2,6 @@ import type { Video, VideoStatus } from '../../types/index.ts';
 import { existsSync } from 'fs';
 import { readdir, stat } from 'fs/promises';
 import { join, extname, basename } from 'path';
-import { execFile } from 'child_process';
-import { promisify } from 'util';
-import ffprobe from 'ffprobe-static';
 import { mediaKey, mediaUrlFromKey, readMediaAsset, saveMediaAsset } from './mediaStorage';
 import { DEFAULT_THUMBNAIL } from '../../lib/placeholders';
 
@@ -110,13 +107,8 @@ const probeDurationSeconds = async (absolutePath: string) => {
 };
 
 const getDurationLabel = async (absolutePath: string) => {
-  try {
-    const seconds = await probeDurationSeconds(absolutePath);
-    return formatDuration(seconds);
-  } catch (error) {
-    console.warn('Failed to determine duration for %s: %s', absolutePath, (error as Error)?.message || error);
-    return '00:00';
-  }
+  // Skip duration probing in API to reduce bundle size
+  return '00:00';
 };
 
 const buildVideoRecord = async (fileName: string): Promise<Video> => {
