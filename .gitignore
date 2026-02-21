@@ -9,5 +9,4 @@ netlify/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
-videos/thumbnails/.DS_Store
-public/uploads/
+public/uploads/videos/thumbnails/.DS_Store

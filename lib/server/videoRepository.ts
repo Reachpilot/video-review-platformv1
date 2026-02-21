@@ -2,6 +2,9 @@ import type { Video, VideoStatus } from '../../types/index.ts';
 import { existsSync } from 'fs';
 import { readdir, stat } from 'fs/promises';
 import { join, extname, basename } from 'path';
+import { execFile } from 'child_process';
+import { promisify } from 'util';
+import ffprobe from 'ffprobe-static';
 import { mediaKey, mediaUrlFromKey, readMediaAsset, saveMediaAsset } from './mediaStorage';
 import { DEFAULT_THUMBNAIL } from '../../lib/placeholders';
 
@@ -80,9 +83,40 @@ const readVideoDirectory = async (): Promise<FileListResult> => {
   }
 };
 
+const execFileAsync = promisify(execFile);
+
+const probeDurationSeconds = async (absolutePath: string) => {
+  const ffprobePath = typeof ffprobe === 'string' ? ffprobe : (ffprobe as { path?: string } | undefined)?.path;
+  if (!ffprobePath) {
+    throw new Error('ffprobe binary not available');
+  }
+
+  const args = [
+    '-v',
+    'error',
+    '-show_entries',
+    'format=duration',
+    '-of',
+    'default=noprint_wrappers=1:nokey=1',
+    absolutePath,
+  ];
+
+  const { stdout } = await execFileAsync(ffprobePath, args);
+  const seconds = parseFloat(String(stdout).trim());
+  if (!Number.isFinite(seconds)) {
+    throw new Error('Invalid duration output');
+  }
+  return seconds;
+};
+
 const getDurationLabel = async (absolutePath: string) => {
-  // Skip duration probing in API to reduce bundle size
-  return '00:00';
+  try {
+    const seconds = await probeDurationSeconds(absolutePath);
+    return formatDuration(seconds);
+  } catch (error) {
+    console.warn('Failed to determine duration for %s: %s', absolutePath, (error as Error)?.message || error);
+    return '00:00';
+  }
 };
 
 const buildVideoRecord = async (fileName: string): Promise<Video> => {
@@ -219,10 +253,11 @@ const loadStore = async (): Promise<VideoStore> => {
   if (!asset?.data) {
     const initial = getInitialStore();
     await persistStore(initial);
-    return initial;
+    return syncStoreWithFilesystem(initial);
   }
   const store = parseStore(asset.data);
-  // Merge metadata from static for correctness
+
+  // Merge correct metadata from static for all videos, preserving status
   try {
     const staticAsset = await readMediaAsset(DATA_FILE_KEY, true);
     if (staticAsset?.data) {
@@ -230,23 +265,26 @@ const loadStore = async (): Promise<VideoStore> => {
       for (const segment of ['default', 'mpu'] as const) {
         const videos = store[segment];
         const staticVideos = staticStore[segment] || [];
-        const videoMap = new Map(videos.map(v => [v.id, v]));
-        for (const staticVideo of staticVideos) {
-          if (videoMap.has(staticVideo.id)) {
-            const video = videoMap.get(staticVideo.id)!;
-            if (!video.duration && staticVideo.duration) video.duration = staticVideo.duration;
-            if (!video.uploadedAt && staticVideo.uploadedAt) video.uploadedAt = staticVideo.uploadedAt;
-          } else {
-            videos.push(staticVideo);
+        const staticMap = new Map(staticVideos.map(v => [v.id, v]));
+        for (const video of videos) {
+          const staticVideo = staticMap.get(video.id);
+          if (staticVideo) {
+            // Update metadata from static
+            if (staticVideo.duration) {
+              video.duration = staticVideo.duration;
+            }
+            if (staticVideo.uploadedAt) {
+              video.uploadedAt = staticVideo.uploadedAt;
+            }
           }
         }
-        videos.sort((a, b) => new Date(b.uploadedAt || '1970-01-01').getTime() - new Date(a.uploadedAt || '1970-01-01').getTime());
       }
     }
   } catch (error) {
-    console.warn('Failed to merge static metadata:', error);
+    // Ignore merge errors
   }
-  return store;
+
+  return syncStoreWithFilesystem(store);
 };
 
 const normalizeSegment = (segment?: string | null): VideoSegment => (segment === 'mpu' ? 'mpu' : 'default');
