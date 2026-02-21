@@ -1,84 +1,9 @@
 import { mkdir, readFile, writeFile } from 'fs/promises';
 import { existsSync } from 'fs';
 import { dirname, join, normalize } from 'path';
-import {
-  getStore,
-  setEnvironmentContext,
-  type EnvironmentContext,
-  type GetStoreOptions,
-} from '@netlify/blobs';
+import { put, del } from '@vercel/blob';
 
-declare global {
-  // eslint-disable-next-line no-var
-  var netlifyBlobsContext: unknown | undefined;
-}
-
-export const BLOB_STORE_NAME = process.env.NETLIFY_BLOBS_STORE || 'video-uploads';
 const MEDIA_ROOT = 'uploads';
-
-type ManualBlobOptions = Omit<GetStoreOptions, 'name'>;
-
-const decodeContextFromEnv = (): EnvironmentContext | null => {
-  const encoded = process.env.NETLIFY_BLOBS_CONTEXT;
-  if (!encoded) return null;
-  try {
-    const json = Buffer.from(encoded, 'base64').toString('utf8');
-    return JSON.parse(json) as EnvironmentContext;
-  } catch (error) {
-    console.warn('Failed to parse NETLIFY_BLOBS_CONTEXT', error);
-    return null;
-  }
-};
-
-const resolveEnvironmentContext = (): EnvironmentContext | null => {
-  if (globalThis.netlifyBlobsContext && typeof globalThis.netlifyBlobsContext === 'object') {
-    return globalThis.netlifyBlobsContext as EnvironmentContext;
-  }
-  return decodeContextFromEnv();
-};
-
-const netlifyContext = resolveEnvironmentContext();
-if (netlifyContext) {
-  setEnvironmentContext(netlifyContext);
-}
-
-const manualBlobOptions: ManualBlobOptions | undefined =
-  process.env.NETLIFY_BLOBS_SITE_ID && process.env.NETLIFY_BLOBS_TOKEN
-    ? {
-        siteID: process.env.NETLIFY_BLOBS_SITE_ID,
-        token: process.env.NETLIFY_BLOBS_TOKEN,
-        edgeURL: process.env.NETLIFY_BLOBS_EDGE_URL,
-        apiURL: process.env.NETLIFY_BLOBS_API_URL,
-      }
-    : undefined;
-
-const hasBlobContext = Boolean(netlifyContext || manualBlobOptions);
-const wantsBlobStorage = process.env.USE_BLOB_STORAGE === 'true';
-const allowBlobStorage = wantsBlobStorage && hasBlobContext;
-export const staticMediaMode = !allowBlobStorage;
-const requiresBlobStorage = wantsBlobStorage;
-const isBlobEnv = allowBlobStorage;
-const dataKeyPrefix = `${MEDIA_ROOT}/data/`;
-const shouldUseBlobForKey = (key: string) => {
-  if (!hasBlobContext) return false;
-  if (isBlobEnv) return true;
-  return key.startsWith(dataKeyPrefix);
-};
-
-const ensureBlobConfigured = () => {
-  if (requiresBlobStorage && !isBlobEnv) {
-    throw new Error(
-      'Netlify Blobs storage is not configured. Please set NETLIFY_BLOBS_SITE_ID/NETLIFY_BLOBS_TOKEN or provide NETLIFY_BLOBS_CONTEXT.'
-    );
-  }
-};
-
-const getMediaStore = () => {
-  if (manualBlobOptions) {
-    return getStore({ name: BLOB_STORE_NAME, ...manualBlobOptions });
-  }
-  return getStore(BLOB_STORE_NAME);
-};
 
 const contentTypeMap: Record<string, string> = {
   mp4: 'video/mp4',
@@ -90,6 +15,12 @@ const contentTypeMap: Record<string, string> = {
   gif: 'image/gif',
   webp: 'image/webp',
 };
+
+const hasBlobContext = Boolean(process.env.VERCEL);
+const wantsBlobStorage = process.env.USE_BLOB_STORAGE === 'true';
+const allowBlobStorage = wantsBlobStorage && hasBlobContext;
+export const staticMediaMode = !allowBlobStorage;
+const isBlobEnv = allowBlobStorage;
 
 const uploadsRoot = join(process.cwd(), 'public', MEDIA_ROOT);
 
@@ -165,21 +96,18 @@ export const guessContentType = (key: string) => {
 
 export const isBlobStorageEnabled = () => isBlobEnv;
 
-export const generateSignedBlobUploadUrl = async (_key: string) => {
-  if (staticMediaMode) {
-    throw new Error('Direct blob uploads are disabled when using static media.');
-  }
-  throw new Error('Direct blob uploads are temporarily disabled.');
-};
-
 export const saveMediaAsset = async (
   key: string,
   data: ArrayBuffer | Buffer | Uint8Array,
   contentType?: string
 ) => {
-  const useBlob = shouldUseBlobForKey(key);
-
-  if (!useBlob) {
+  if (isBlobEnv) {
+    const result = await put(key, toBuffer(data), { access: 'public' });
+    return {
+      key: result.url,
+      url: result.url,
+    };
+  } else {
     const targetPath = join(process.cwd(), 'public', key);
     await ensureLocalDir(targetPath);
     await writeFile(targetPath, toBuffer(data));
@@ -189,64 +117,25 @@ export const saveMediaAsset = async (
       url: mediaUrlFromKey(key),
     };
   }
-
-  ensureBlobConfigured();
-  const store = getMediaStore();
-  await store.set(key, toArrayBuffer(data), {
-    metadata: {
-      contentType: contentType || guessContentType(key),
-    },
-  });
-
-  // Best-effort local write to keep static fallback updated (ignored on read-only FS)
-  try {
-    const targetPath = join(process.cwd(), 'public', key);
-    await ensureLocalDir(targetPath);
-    await writeFile(targetPath, toBuffer(data));
-  } catch (error) {
-    // Ignore inability to write locally
-  }
-
-  return {
-    key,
-    url: mediaUrlFromKey(key),
-  };
 };
 
 export const readMediaAsset = async (key: string, forceStatic: boolean = false) => {
-  const sanitized = key.replace(/\\/g, '/');
-  if (!sanitized.startsWith(`${MEDIA_ROOT}/`)) {
-    return null;
+  if (key.startsWith('https://')) {
+    const response = await fetch(key);
+    if (!response.ok) return null;
+    const data = await response.arrayBuffer();
+    return {
+      data: Buffer.from(data),
+      contentType: guessContentType(key),
+    };
   }
 
-  if (forceStatic) {
-    return readLocalAsset(sanitized);
-  }
-
-  if (shouldUseBlobForKey(sanitized)) {
-    ensureBlobConfigured();
-    const store = getMediaStore();
-    const entry = await store.getWithMetadata(sanitized, { type: 'arrayBuffer' });
-    if (entry?.data) {
-      return {
-        data: Buffer.from(entry.data),
-        contentType: entry.metadata?.contentType || guessContentType(sanitized),
-      };
-    }
-
-    return readLocalAsset(sanitized);
-  }
-
-  return readLocalAsset(sanitized);
+  return readLocalAsset(key);
 };
 
 export const deleteMediaAsset = async (key: string) => {
-  if (!key.startsWith(`${MEDIA_ROOT}/`)) return;
-
-  if (shouldUseBlobForKey(key)) {
-    ensureBlobConfigured();
-    const store = getMediaStore();
-    await store.delete(key);
+  if (key.startsWith('https://')) {
+    await del(key);
     return;
   }
 
