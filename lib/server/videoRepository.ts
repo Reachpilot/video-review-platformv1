@@ -219,7 +219,7 @@ const loadStore = async (): Promise<VideoStore> => {
   if (!asset?.data) {
     const initial = getInitialStore();
     await persistStore(initial);
-    return syncStoreWithFilesystem(initial);
+    return initial;
   }
   const store = parseStore(asset.data);
 
@@ -250,7 +250,7 @@ const loadStore = async (): Promise<VideoStore> => {
     // Ignore merge errors
   }
 
-  return syncStoreWithFilesystem(store);
+  return store;
 };
 
 const normalizeSegment = (segment?: string | null): VideoSegment => (segment === 'mpu' ? 'mpu' : 'default');
