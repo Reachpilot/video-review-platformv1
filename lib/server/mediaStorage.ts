@@ -1,84 +1,20 @@
 import { mkdir, readFile, writeFile } from 'fs/promises';
 import { existsSync } from 'fs';
 import { dirname, join, normalize } from 'path';
-import {
-  getStore,
-  setEnvironmentContext,
-  type EnvironmentContext,
-  type GetStoreOptions,
-} from '@netlify/blobs';
+import { createClient } from '@supabase/supabase-js';
 
-declare global {
-  // eslint-disable-next-line no-var
-  var netlifyBlobsContext: unknown | undefined;
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+let supabase: any = null;
+if (supabaseUrl && supabaseKey) {
+  supabase = createClient(supabaseUrl, supabaseKey);
+} else {
+  console.warn('Supabase credentials not found, falling back to local storage');
 }
 
-export const BLOB_STORE_NAME = process.env.NETLIFY_BLOBS_STORE || 'video-uploads';
+export const BLOB_STORE_NAME = 'videos'; // Supabase bucket name
 const MEDIA_ROOT = 'uploads';
-
-type ManualBlobOptions = Omit<GetStoreOptions, 'name'>;
-
-const decodeContextFromEnv = (): EnvironmentContext | null => {
-  const encoded = process.env.NETLIFY_BLOBS_CONTEXT;
-  if (!encoded) return null;
-  try {
-    const json = Buffer.from(encoded, 'base64').toString('utf8');
-    return JSON.parse(json) as EnvironmentContext;
-  } catch (error) {
-    console.warn('Failed to parse NETLIFY_BLOBS_CONTEXT', error);
-    return null;
-  }
-};
-
-const resolveEnvironmentContext = (): EnvironmentContext | null => {
-  if (globalThis.netlifyBlobsContext && typeof globalThis.netlifyBlobsContext === 'object') {
-    return globalThis.netlifyBlobsContext as EnvironmentContext;
-  }
-  return decodeContextFromEnv();
-};
-
-const netlifyContext = resolveEnvironmentContext();
-if (netlifyContext) {
-  setEnvironmentContext(netlifyContext);
-}
-
-const manualBlobOptions: ManualBlobOptions | undefined =
-  process.env.NETLIFY_BLOBS_SITE_ID && process.env.NETLIFY_BLOBS_TOKEN
-    ? {
-        siteID: process.env.NETLIFY_BLOBS_SITE_ID,
-        token: process.env.NETLIFY_BLOBS_TOKEN,
-        edgeURL: process.env.NETLIFY_BLOBS_EDGE_URL,
-        apiURL: process.env.NETLIFY_BLOBS_API_URL,
-      }
-    : undefined;
-
-const hasBlobContext = Boolean(netlifyContext || manualBlobOptions);
-const wantsBlobStorage = process.env.USE_BLOB_STORAGE === 'true';
-const allowBlobStorage = wantsBlobStorage && hasBlobContext;
-export const staticMediaMode = !allowBlobStorage;
-const requiresBlobStorage = wantsBlobStorage;
-const isBlobEnv = allowBlobStorage;
-const dataKeyPrefix = `${MEDIA_ROOT}/data/`;
-const shouldUseBlobForKey = (key: string) => {
-  if (!hasBlobContext) return false;
-  if (isBlobEnv) return true;
-  return key.startsWith(dataKeyPrefix);
-};
-
-const ensureBlobConfigured = () => {
-  if (requiresBlobStorage && !isBlobEnv) {
-    throw new Error(
-      'Netlify Blobs storage is not configured. Please set NETLIFY_BLOBS_SITE_ID/NETLIFY_BLOBS_TOKEN or provide NETLIFY_BLOBS_CONTEXT.'
-    );
-  }
-};
-
-const getMediaStore = () => {
-  if (manualBlobOptions) {
-    return getStore({ name: BLOB_STORE_NAME, ...manualBlobOptions });
-  }
-  return getStore(BLOB_STORE_NAME);
-};
 
 const contentTypeMap: Record<string, string> = {
   mp4: 'video/mp4',
@@ -89,6 +25,7 @@ const contentTypeMap: Record<string, string> = {
   png: 'image/png',
   gif: 'image/gif',
   webp: 'image/webp',
+  json: 'application/json',
 };
 
 const uploadsRoot = join(process.cwd(), 'public', MEDIA_ROOT);
@@ -125,16 +62,6 @@ const toBuffer = (data: BinaryData): Buffer => {
   throw new Error('Unsupported data type');
 };
 
-const toArrayBuffer = (data: BinaryData): ArrayBuffer => {
-  if (data instanceof ArrayBuffer) return data;
-  if (isSharedBuffer(data)) {
-    const copy = Buffer.from(new Uint8Array(data));
-    return copy.buffer.slice(copy.byteOffset, copy.byteOffset + copy.byteLength) as ArrayBuffer;
-  }
-  const buffer = toBuffer(data);
-  return buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength) as ArrayBuffer;
-};
-
 const ensureLocalDir = async (targetPath: string) => {
   const dir = dirname(targetPath);
   if (!existsSync(dir)) {
@@ -147,20 +74,36 @@ export const mediaKey = (...segments: string[]) => {
   return [MEDIA_ROOT, ...cleanSegments].join('/');
 };
 
-export const mediaUrlFromKey = (key: string) => (staticMediaMode ? `/${key}` : `/api/media/${key}`);
+export const mediaUrlFromKey = (key: string) => {
+  if (supabase) {
+    // For Supabase, use the public URL
+    const filePath = key.replace(`${MEDIA_ROOT}/`, '');
+    const { data } = supabase.storage.from(BLOB_STORE_NAME).getPublicUrl(filePath);
+    return data.publicUrl;
+  } else {
+    // Fallback to local static files
+    return `/${key}`;
+  }
+};
 
 export const guessContentType = (key: string) => {
   const extMatch = key.split('.').pop()?.toLowerCase();
   return (extMatch && contentTypeMap[extMatch]) || 'application/octet-stream';
 };
 
-export const isBlobStorageEnabled = () => isBlobEnv;
+export const isBlobStorageEnabled = () => true; // Always use Supabase
 
-export const generateSignedBlobUploadUrl = async (_key: string) => {
-  if (staticMediaMode) {
-    throw new Error('Direct blob uploads are disabled when using static media.');
+export const generateSignedBlobUploadUrl = async (key: string) => {
+  const filePath = key.replace(`${MEDIA_ROOT}/`, '');
+  const { data, error } = await supabase.storage
+    .from(BLOB_STORE_NAME)
+    .createSignedUploadUrl(filePath);
+
+  if (error) {
+    throw new Error(`Failed to generate upload URL: ${error.message}`);
   }
-  throw new Error('Direct blob uploads are temporarily disabled.');
+
+  return data.signedUrl;
 };
 
 export const saveMediaAsset = async (
@@ -168,34 +111,35 @@ export const saveMediaAsset = async (
   data: ArrayBuffer | Buffer | Uint8Array,
   contentType?: string
 ) => {
-  const useBlob = shouldUseBlobForKey(key);
+  const buffer = toBuffer(data);
 
-  if (!useBlob) {
+  if (supabase) {
+    const filePath = key.replace(`${MEDIA_ROOT}/`, '');
+
+    const { error } = await supabase.storage
+      .from(BLOB_STORE_NAME)
+      .upload(filePath, buffer, {
+        contentType: contentType || guessContentType(key),
+        upsert: true,
+      });
+
+    if (error) {
+      throw new Error(`Failed to upload to Supabase: ${error.message}`);
+    }
+  } else {
+    // Fallback to local storage
     const targetPath = join(process.cwd(), 'public', key);
     await ensureLocalDir(targetPath);
-    await writeFile(targetPath, toBuffer(data));
-
-    return {
-      key,
-      url: mediaUrlFromKey(key),
-    };
+    await writeFile(targetPath, buffer);
   }
 
-  ensureBlobConfigured();
-  const store = getMediaStore();
-  await store.set(key, toArrayBuffer(data), {
-    metadata: {
-      contentType: contentType || guessContentType(key),
-    },
-  });
-
-  // Best-effort local write to keep static fallback updated (ignored on read-only FS)
+  // Also write locally for development/fallback
   try {
     const targetPath = join(process.cwd(), 'public', key);
     await ensureLocalDir(targetPath);
-    await writeFile(targetPath, toBuffer(data));
+    await writeFile(targetPath, buffer);
   } catch (error) {
-    // Ignore inability to write locally
+    // Ignore local write errors in production
   }
 
   return {
@@ -214,43 +158,55 @@ export const readMediaAsset = async (key: string, forceStatic: boolean = false) 
     return readLocalAsset(sanitized);
   }
 
-  if (shouldUseBlobForKey(sanitized)) {
-    ensureBlobConfigured();
-    const store = getMediaStore();
-    const entry = await store.getWithMetadata(sanitized, { type: 'arrayBuffer' });
-    if (entry?.data) {
-      return {
-        data: Buffer.from(entry.data),
-        contentType: entry.metadata?.contentType || guessContentType(sanitized),
-      };
-    }
+  if (supabase) {
+    const filePath = sanitized.replace(`${MEDIA_ROOT}/`, '');
 
+    try {
+      const { data, error } = await supabase.storage
+        .from(BLOB_STORE_NAME)
+        .download(filePath);
+
+      if (error || !data) {
+        return readLocalAsset(sanitized);
+      }
+
+      const arrayBuffer = await data.arrayBuffer();
+      return {
+        data: Buffer.from(arrayBuffer),
+        contentType: guessContentType(sanitized),
+      };
+    } catch (error) {
+      return readLocalAsset(sanitized);
+    }
+  } else {
     return readLocalAsset(sanitized);
   }
-
-  return readLocalAsset(sanitized);
 };
 
 export const deleteMediaAsset = async (key: string) => {
   if (!key.startsWith(`${MEDIA_ROOT}/`)) return;
 
-  if (shouldUseBlobForKey(key)) {
-    ensureBlobConfigured();
-    const store = getMediaStore();
-    await store.delete(key);
-    return;
+  if (supabase) {
+    const filePath = key.replace(`${MEDIA_ROOT}/`, '');
+
+    const { error } = await supabase.storage
+      .from(BLOB_STORE_NAME)
+      .remove([filePath]);
+
+    if (error) {
+      console.warn(`Failed to delete from Supabase: ${error.message}`);
+    }
   }
 
+  // Also delete locally
   const absolutePath = join(process.cwd(), 'public', key);
   const normalized = normalize(absolutePath);
-  if (!normalized.startsWith(uploadsRoot)) {
-    return;
-  }
-
-  try {
-    const { unlink } = await import('fs/promises');
-    await unlink(normalized);
-  } catch (error) {
-    // Ignore missing files
+  if (normalized.startsWith(uploadsRoot)) {
+    try {
+      const { unlink } = await import('fs/promises');
+      await unlink(normalized);
+    } catch (error) {
+      // Ignore missing files
+    }
   }
 };
