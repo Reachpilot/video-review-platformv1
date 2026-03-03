@@ -11,6 +11,7 @@ import { getVideoDurationInSeconds } from 'get-video-duration';
 import { spawn } from 'child_process';
 import { promisify } from 'util';
 import { readFileSync, existsSync } from 'fs';
+import { createClient } from '@supabase/supabase-js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -21,18 +22,44 @@ const THUMBS_DIR = path.join(VIDEOS_DIR, 'thumbnails');
 const DATA_DIR = path.join(UPLOADS_ROOT, 'data');
 const DATA_FILE = path.join(DATA_DIR, 'videos.json');
 const useMediaProxy = process.env.USE_BLOB_STORAGE === 'true';
-const mediaUrlFromKey = key => `/${key}`;
+const mediaUrlFromKey = key => {
+  if (supabaseClient) {
+    return supabaseClient.storage.from(BLOB_STORE_NAME).getPublicUrl(key).data.publicUrl;
+  } else if (useMediaProxy) {
+    return `/api/media/${key}`;
+  } else {
+    return `/${key}`;
+  }
+};
+
+// Load .env.local
+const envPath = path.join(__dirname, '..', '.env.local');
+if (existsSync(envPath)) {
+  const envContent = readFileSync(envPath, 'utf8');
+  envContent.split('\n').forEach(line => {
+    if (line.includes('=')) {
+      const [key, value] = line.split('=', 2);
+      process.env[key.trim()] = value.trim();
+    }
+  });
+}
 
 // Supabase client
-const supabaseClient = null;
+const supabaseClient = process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ? createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) : null;
 const BLOB_STORE_NAME = 'videos';
 
 // Save media asset function
-const saveMediaAsset = async (key, content) => {
-  const filePath = path.join(process.cwd(), 'public', key);
-  await fs.mkdir(path.dirname(filePath), { recursive: true });
-  await fs.writeFile(filePath, content);
-  return key;
+const saveMediaAsset = async (key, content, contentType) => {
+  if (supabaseClient) {
+    const { data, error } = await supabaseClient.storage.from(BLOB_STORE_NAME).upload(key, content, { contentType, upsert: true });
+    if (error) throw error;
+    return data.path;
+  } else {
+    const filePath = path.join(process.cwd(), 'public', key);
+    await fs.mkdir(path.dirname(filePath), { recursive: true });
+    await fs.writeFile(filePath, content);
+    return key;
+  }
 };
 
 const IGNORED_FILES = new Set(['.gitkeep']);
@@ -182,16 +209,16 @@ const buildVideoRecord = async (entry, existingVideo) => {
 
   const stats = await fs.stat(absoluteVideoPath);
 
-  const relativeVideoKey = path.posix.join('videos', entry.name);
-  const relativeThumbnailKey = path.posix.join('videos', 'thumbnails', thumbFilename);
+  const relativeVideoKey = path.posix.join('uploads', 'videos', videoSlug);
+  const relativeThumbnailKey = path.posix.join('uploads', 'videos', 'thumbnails', thumbFilename);
 
-  // Upload video to local
+  // Upload video to Supabase
   const videoContent = await fs.readFile(absoluteVideoPath);
-  await saveMediaAsset(relativeVideoKey, videoContent);
+  await saveMediaAsset(relativeVideoKey, videoContent, 'video/mp4'); // TODO: detect mime type
 
-  // Upload thumbnail to local
+  // Upload thumbnail to Supabase
   const thumbContent = await fs.readFile(absoluteThumbnailPath);
-  await saveMediaAsset(relativeThumbnailKey, thumbContent);
+  await saveMediaAsset(relativeThumbnailKey, thumbContent, 'image/jpeg');
 
   return {
     id: existingVideo?.id || `vid-${slug}`,
