@@ -208,6 +208,12 @@ const buildVideoRecord = async (entry, existingVideo) => {
   }
 
   const stats = await fs.stat(absoluteVideoPath);
+
+  // Skip videos larger than 50MB
+  if (stats.size > 50 * 1024 * 1024) {
+    console.log(`Skipping large file ${entry.name} (${formatBytes(stats.size)})`);
+    return null;
+  }
   const relativeVideoKey = path.posix.join('uploads', 'videos', videoSlug);
   const relativeThumbnailKey = path.posix.join('uploads', 'videos', 'thumbnails', thumbFilename);
 
@@ -247,7 +253,7 @@ async function main() {
   }
 
   const existingByFile = new Map((existingStore.default || []).map(video => [video.fileName, video]));
-  const videos = await Promise.all(entries.map(entry => buildVideoRecord(entry, existingByFile.get(entry.name))));
+  const videos = (await Promise.all(entries.map(entry => buildVideoRecord(entry, existingByFile.get(entry.name))))).filter(v => v !== null);
   videos.sort((a, b) => new Date(b.uploadedAt).getTime() - new Date(a.uploadedAt).getTime());
 
   const store = {
