@@ -46,7 +46,7 @@ if (existsSync(envPath)) {
 }
 
 // Supabase client
-const supabaseClient = process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ? createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) : null;
+const supabaseClient = null;
 const BLOB_STORE_NAME = 'videos';
 
 // Save media asset function
@@ -239,6 +239,19 @@ const buildVideoRecord = async (entry, existingVideo) => {
 
 // Start watcher
 await Promise.all([ensureDir(VIDEOS_DIR), ensureDir(THUMBS_DIR), ensureDir(DATA_DIR)]);
+
+// Initial sync of existing videos
+const existingStore = await readExistingStore();
+const entries = await discoverVideoFiles();
+if (entries.length > 0) {
+  console.log('Syncing existing videos...');
+  const existingByFile = new Map((existingStore.default || []).map(video => [video.fileName, video]));
+  const videos = await Promise.all(entries.map(entry => buildVideoRecord(entry, existingByFile.get(entry.name))));
+  videos.sort((a, b) => new Date(b.uploadedAt).getTime() - new Date(a.uploadedAt).getTime());
+  existingStore.default = videos;
+  await fs.writeFile(DATA_FILE, JSON.stringify(existingStore, null, 2));
+  console.log(`Synced ${videos.length} existing video(s)`);
+}
 
 // Initial sync of existing videos
 const existingStore = await readExistingStore();

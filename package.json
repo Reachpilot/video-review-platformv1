@@ -2,6 +2,7 @@
   "name": "video-review-platform",
   "version": "0.1.0",
   "private": true,
+  "type": "module",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
@@ -18,7 +19,6 @@
     "ffprobe-static": "^3.1.0",
     "framer-motion": "^12.23.24",
     "get-video-duration": "^4.1.0",
-    "chokidar": "^3.6.0",
     "next": "14.0.4",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
@@ -27,7 +27,6 @@
     "undici": "5.22.1"
   },
   "devDependencies": {
-    "@netlify/plugin-nextjs": "^5.15.8",
     "@types/node": "^20",
     "@types/react": "^18",
     "@types/react-dom": "^18",
