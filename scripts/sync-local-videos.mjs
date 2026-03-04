@@ -15,6 +15,7 @@ import { readFileSync, existsSync } from 'fs';
 import { createClient } from '@supabase/supabase-js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const BLOB_STORE_NAME = 'videos';
 
 const ROOT = path.join(__dirname, '..');
 const UPLOADS_ROOT = path.join(ROOT, 'public', 'uploads');
