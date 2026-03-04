@@ -35,19 +35,29 @@ const mediaUrlFromKey = key => {
 
 // Load .env.local
 const envPath = path.join(__dirname, '..', '.env.local');
+console.log('Loading env from', envPath);
 if (existsSync(envPath)) {
-  const envContent = readFileSync(envPath, 'utf8');
-  envContent.split('\n').forEach(line => {
-    if (line.includes('=')) {
-      const [key, value] = line.split('=', 2);
-      process.env[key.trim()] = value.trim();
-    }
-  });
+  console.log('File exists');
+  try {
+    const envContent = readFileSync(envPath, 'utf8');
+    envContent.split('\n').forEach(line => {
+      if (line.includes('=')) {
+        const [key, value] = line.split('=', 2);
+        process.env[key.trim()] = value.trim();
+        console.log('Setting', key.trim(), '=', value.trim());
+      }
+    });
+  } catch (error) {
+    console.log('Error reading env file:', error);
+  }
+} else {
+  console.log('File not exists');
 }
 
 // Supabase client
-const supabaseClient = null;
-const BLOB_STORE_NAME = 'videos';
+const SUPABASE_URL = 'https://imfdirgeowmmuzbtelui.supabase.co';
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImltZmRpcmdlb3dtbXV6YnRlbHVpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzIxMjU2MjYsImV4cCI6MjA4NzcwMTYyNn0.dnjKuGwVUyfL7UxPSnCU0BI4BVDd6AHupOMqUdn-hTc';
+const supabaseClient = createClient(SUPABASE_URL, SUPABASE_KEY);
 
 // Save media asset function
 const saveMediaAsset = async (key, content, contentType) => {
@@ -253,19 +263,6 @@ if (entries.length > 0) {
   console.log(`Synced ${videos.length} existing video(s)`);
 }
 
-// Initial sync of existing videos
-const existingStore = await readExistingStore();
-const entries = await discoverVideoFiles();
-if (entries.length > 0) {
-  console.log('Syncing existing videos...');
-  const existingByFile = new Map((existingStore.default || []).map(video => [video.fileName, video]));
-  const videos = await Promise.all(entries.map(entry => buildVideoRecord(entry, existingByFile.get(entry.name))));
-  videos.sort((a, b) => new Date(b.uploadedAt).getTime() - new Date(a.uploadedAt).getTime());
-  existingStore.default = videos;
-  await fs.writeFile(DATA_FILE, JSON.stringify(existingStore, null, 2));
-  console.log(`Synced ${videos.length} existing video(s)`);
-}
-
 const watcher = watch(VIDEOS_DIR, { ignored: /(^|[\/\\])\../, persistent: true });
 
 watcher.on('add', async (filePath) => {
@@ -275,8 +272,8 @@ watcher.on('add', async (filePath) => {
   const entry = { name: path.basename(filePath), isFile: () => true };
   console.log(`New video detected: ${entry.name}`);
 
-  const existingStore = await readExistingStore();
-  const existingVideo = existingStore.default.find(v => v.fileName === entry.name);
+  const store = await readExistingStore();
+  const existingVideo = store.default.find(v => v.fileName === entry.name);
 
   if (existingVideo) {
     console.log(`Video ${entry.name} already synced.`);
@@ -285,9 +282,9 @@ watcher.on('add', async (filePath) => {
 
   try {
     const record = await buildVideoRecord(entry);
-    existingStore.default.push(record);
-    existingStore.default.sort((a, b) => new Date(b.uploadedAt).getTime() - new Date(a.uploadedAt).getTime());
-    await fs.writeFile(DATA_FILE, JSON.stringify(existingStore, null, 2));
+    store.default.push(record);
+    store.default.sort((a, b) => new Date(b.uploadedAt).getTime() - new Date(a.uploadedAt).getTime());
+    await fs.writeFile(DATA_FILE, JSON.stringify(store, null, 2));
     console.log(`Synced new video: ${entry.name}`);
   } catch (error) {
     console.error(`Failed to sync ${entry.name}:`, error);
