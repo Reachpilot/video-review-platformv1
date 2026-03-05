@@ -10,13 +10,10 @@ import { fileURLToPath } from 'url';
 import { getVideoDurationInSeconds } from 'get-video-duration';
 import { spawn } from 'child_process';
 import { promisify } from 'util';
-import { watch } from 'chokidar';
 import { readFileSync, existsSync } from 'fs';
 import { createClient } from '@supabase/supabase-js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const BLOB_STORE_NAME = 'videos';
-
 const ROOT = path.join(__dirname, '..');
 const UPLOADS_ROOT = path.join(ROOT, 'public', 'uploads');
 const VIDEOS_DIR = path.join(UPLOADS_ROOT, 'videos');
@@ -26,8 +23,7 @@ const DATA_FILE = path.join(DATA_DIR, 'videos.json');
 const useMediaProxy = process.env.USE_BLOB_STORAGE === 'true';
 const mediaUrlFromKey = key => {
   if (supabaseClient) {
-    const filePath = key.replace(/^uploads\//, '');
-    return supabaseClient.storage.from(BLOB_STORE_NAME).getPublicUrl(filePath).data.publicUrl;
+    return supabaseClient.storage.from(BLOB_STORE_NAME).getPublicUrl(key).data.publicUrl;
   } else if (useMediaProxy) {
     return `/api/media/${key}`;
   } else {
@@ -37,29 +33,19 @@ const mediaUrlFromKey = key => {
 
 // Load .env.local
 const envPath = path.join(__dirname, '..', '.env.local');
-console.log('Loading env from', envPath);
 if (existsSync(envPath)) {
-  console.log('File exists');
-  try {
-    const envContent = readFileSync(envPath, 'utf8');
-    envContent.split('\n').forEach(line => {
-      if (line.includes('=')) {
-        const [key, value] = line.split('=', 2);
-        process.env[key.trim()] = value.trim();
-        console.log('Setting', key.trim(), '=', value.trim());
-      }
-    });
-  } catch (error) {
-    console.log('Error reading env file:', error);
-  }
-} else {
-  console.log('File not exists');
+  const envContent = readFileSync(envPath, 'utf8');
+  envContent.split('\n').forEach(line => {
+    if (line.includes('=')) {
+      const [key, value] = line.split('=', 2);
+      process.env[key.trim()] = value.trim();
+    }
+  });
 }
 
 // Supabase client
-const SUPABASE_URL = 'https://imfdirgeowmmuzbtelui.supabase.co';
-const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImltZmRpcmdlb3dtbXV6YnRlbHVpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzIxMjU2MjYsImV4cCI6MjA4NzcwMTYyNn0.dnjKuGwVUyfL7UxPSnCU0BI4BVDd6AHupOMqUdn-hTc';
-const supabaseClient = createClient(SUPABASE_URL, SUPABASE_KEY);
+const supabaseClient = process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ? createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) : null;
+const BLOB_STORE_NAME = 'videos';
 
 // Save media asset function
 const saveMediaAsset = async (key, content, contentType) => {
@@ -222,8 +208,8 @@ const buildVideoRecord = async (entry, existingVideo) => {
 
   const stats = await fs.stat(absoluteVideoPath);
 
-  const relativeVideoKey = videoSlug;
-  const relativeThumbnailKey = path.posix.join('thumbnails', thumbFilename);
+  const relativeVideoKey = path.posix.join('uploads', 'videos', videoSlug);
+  const relativeThumbnailKey = path.posix.join('uploads', 'videos', 'thumbnails', thumbFilename);
 
   // Upload video to Supabase
   const videoContent = await fs.readFile(absoluteVideoPath);
@@ -265,7 +251,7 @@ if (entries.length > 0) {
   console.log(`Synced ${videos.length} existing video(s)`);
 }
 
-const watcher = watch(VIDEOS_DIR, { ignored: /(^|[\/\\])\../, persistent: true });
+const watcher = require('chokidar').watch(VIDEOS_DIR, { ignored: /(^|[\/\\])\../, persistent: true });
 
 watcher.on('add', async (filePath) => {
   const ext = path.extname(filePath).toLowerCase();
