@@ -2,7 +2,6 @@
   "name": "video-review-platform",
   "version": "0.1.0",
   "private": true,
-  "type": "module",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
@@ -27,6 +26,7 @@
     "undici": "5.22.1"
   },
   "devDependencies": {
+    "@netlify/plugin-nextjs": "^5.15.8",
     "@types/node": "^20",
     "@types/react": "^18",
     "@types/react-dom": "^18",

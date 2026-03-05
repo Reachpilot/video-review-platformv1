@@ -1,10 +1,5 @@
-import { rm } from 'fs/promises';
-import { join } from 'path';
-import { fileURLToPath } from 'url';
-import { dirname } from 'path';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
+const { rm } = require('fs/promises');
+const { join } = require('path');
 
 const TARGETS = [
   join(__dirname, '..', 'public', 'uploads'),

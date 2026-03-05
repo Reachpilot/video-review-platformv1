@@ -1,9 +1,5 @@
-import { writeFile, mkdir, readdir } from 'fs/promises';
-import { join, dirname } from 'path';
-import { fileURLToPath } from 'url';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
+const { writeFile, mkdir, readdir } = require('fs/promises');
+const { join, dirname } = require('path');
 
 const STUB_CONTENT = JSON.stringify({ version: 3, sources: [], names: [], mappings: '' });
 const TARGET_DIRECTORIES = [

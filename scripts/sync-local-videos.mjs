@@ -14,6 +14,7 @@ import { readFileSync, existsSync } from 'fs';
 import { createClient } from '@supabase/supabase-js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
 const ROOT = path.join(__dirname, '..');
 const UPLOADS_ROOT = path.join(ROOT, 'public', 'uploads');
 const VIDEOS_DIR = path.join(UPLOADS_ROOT, 'videos');
@@ -22,13 +23,12 @@ const DATA_DIR = path.join(UPLOADS_ROOT, 'data');
 const DATA_FILE = path.join(DATA_DIR, 'videos.json');
 const useMediaProxy = process.env.USE_BLOB_STORAGE === 'true';
 const mediaUrlFromKey = key => {
-  const fullKey = `uploads/videos/${key}`;
   if (supabaseClient) {
-    return supabaseClient.storage.from(BLOB_STORE_NAME).getPublicUrl(fullKey).data.publicUrl;
+    return supabaseClient.storage.from(BLOB_STORE_NAME).getPublicUrl(key).data.publicUrl;
   } else if (useMediaProxy) {
-    return `/api/media/${fullKey}`;
+    return `/api/media/${key}`;
   } else {
-    return `/${fullKey}`;
+    return `/${key}`;
   }
 };
 
@@ -208,9 +208,8 @@ const buildVideoRecord = async (entry, existingVideo) => {
   }
 
   const stats = await fs.stat(absoluteVideoPath);
-
-  const relativeVideoKey = videoSlug;
-  const relativeThumbnailKey = path.posix.join('thumbnails', thumbFilename);
+  const relativeVideoKey = path.posix.join('uploads', 'videos', videoSlug);
+  const relativeThumbnailKey = path.posix.join('uploads', 'videos', 'thumbnails', thumbFilename);
 
   // Upload video to Supabase
   const videoContent = await fs.readFile(absoluteVideoPath);
@@ -236,48 +235,31 @@ const buildVideoRecord = async (entry, existingVideo) => {
   };
 };
 
-// Start watcher
-await Promise.all([ensureDir(VIDEOS_DIR), ensureDir(THUMBS_DIR), ensureDir(DATA_DIR)]);
+async function main() {
+  await Promise.all([ensureDir(VIDEOS_DIR), ensureDir(THUMBS_DIR), ensureDir(DATA_DIR)]);
 
-// Initial sync of existing videos
-const existingStore = await readExistingStore();
-const entries = await discoverVideoFiles();
-if (entries.length > 0) {
-  console.log('Syncing existing videos...');
-  const existingByFile = new Map((existingStore.default || []).map(video => [video.fileName, video]));
-  const videos = await Promise.all(entries.map(entry => buildVideoRecord(entry, existingByFile.get(entry.name))));
-  videos.sort((a, b) => new Date(b.uploadedAt).getTime() - new Date(a.uploadedAt).getTime());
-  existingStore.default = videos;
-  await fs.writeFile(DATA_FILE, JSON.stringify(existingStore, null, 2));
-  console.log(`Synced ${videos.length} existing video(s)`);
-}
+  const [existingStore, entries] = await Promise.all([readExistingStore(), discoverVideoFiles()]);
 
-const watcher = require('chokidar').watch(VIDEOS_DIR, { ignored: /(^|[\/\\])\../, persistent: true });
-
-watcher.on('add', async (filePath) => {
-  const ext = path.extname(filePath).toLowerCase();
-  if (!SUPPORTED_EXTENSIONS.has(ext)) return;
-
-  const entry = { name: path.basename(filePath), isFile: () => true };
-  console.log(`New video detected: ${entry.name}`);
-
-  const store = await readExistingStore();
-  const existingVideo = store.default.find(v => v.fileName === entry.name);
-
-  if (existingVideo) {
-    console.log(`Video ${entry.name} already synced.`);
+  if (entries.length === 0) {
+    console.log('No local videos found – created empty videos.json');
+    await fs.writeFile(DATA_FILE, JSON.stringify({ default: [], mpu: existingStore.mpu || [] }, null, 2));
     return;
   }
 
-  try {
-    const record = await buildVideoRecord(entry);
-    store.default.push(record);
-    store.default.sort((a, b) => new Date(b.uploadedAt).getTime() - new Date(a.uploadedAt).getTime());
-    await fs.writeFile(DATA_FILE, JSON.stringify(store, null, 2));
-    console.log(`Synced new video: ${entry.name}`);
-  } catch (error) {
-    console.error(`Failed to sync ${entry.name}:`, error);
-  }
-});
+  const existingByFile = new Map((existingStore.default || []).map(video => [video.fileName, video]));
+  const videos = await Promise.all(entries.map(entry => buildVideoRecord(entry, existingByFile.get(entry.name))));
+  videos.sort((a, b) => new Date(b.uploadedAt).getTime() - new Date(a.uploadedAt).getTime());
 
-console.log('Watching for new videos in', VIDEOS_DIR);
+  const store = {
+    default: videos,
+    mpu: existingStore.mpu || [],
+  };
+
+  await fs.writeFile(DATA_FILE, JSON.stringify(store, null, 2));
+  console.log(`Synced ${videos.length} video(s) to ${path.relative(ROOT, DATA_FILE)}`);
+}
+
+main().catch(error => {
+  console.error('Failed to synchronize local videos.', error);
+  process.exitCode = 1;
+});
