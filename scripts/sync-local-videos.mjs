@@ -22,12 +22,13 @@ const DATA_DIR = path.join(UPLOADS_ROOT, 'data');
 const DATA_FILE = path.join(DATA_DIR, 'videos.json');
 const useMediaProxy = process.env.USE_BLOB_STORAGE === 'true';
 const mediaUrlFromKey = key => {
+  const fullKey = `uploads/videos/${key}`;
   if (supabaseClient) {
-    return supabaseClient.storage.from(BLOB_STORE_NAME).getPublicUrl(key).data.publicUrl;
+    return supabaseClient.storage.from(BLOB_STORE_NAME).getPublicUrl(fullKey).data.publicUrl;
   } else if (useMediaProxy) {
-    return `/api/media/${key}`;
+    return `/api/media/${fullKey}`;
   } else {
-    return `/${key}`;
+    return `/${fullKey}`;
   }
 };
 
@@ -208,8 +209,8 @@ const buildVideoRecord = async (entry, existingVideo) => {
 
   const stats = await fs.stat(absoluteVideoPath);
 
-  const relativeVideoKey = path.posix.join('uploads', 'videos', videoSlug);
-  const relativeThumbnailKey = path.posix.join('uploads', 'videos', 'thumbnails', thumbFilename);
+  const relativeVideoKey = videoSlug;
+  const relativeThumbnailKey = path.posix.join('thumbnails', thumbFilename);
 
   // Upload video to Supabase
   const videoContent = await fs.readFile(absoluteVideoPath);
