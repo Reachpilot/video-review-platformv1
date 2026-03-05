@@ -13,12 +13,18 @@ const inter = Inter({
 export const metadata: Metadata = {
   title: 'Video Review Platform',
   description: 'A modern platform for reviewing and managing video content',
-  themeColor: '#ffffff',
-  viewport: 'width=device-width, initial-scale=1',
   icons: {
     icon: '/favicon.ico',
   },
 };
+
+export function generateViewport() {
+  return {
+    width: 'device-width',
+    initialScale: 1,
+    themeColor: '#ffffff',
+  };
+}
 
 export default function RootLayout({
   children,
