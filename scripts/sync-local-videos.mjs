@@ -257,6 +257,9 @@ async function main() {
 
   await fs.writeFile(DATA_FILE, JSON.stringify(store, null, 2));
   console.log(`Synced ${videos.length} video(s) to ${path.relative(ROOT, DATA_FILE)}`);
+
+  // Upload to Supabase for API access
+  await saveMediaAsset(DATA_FILE_KEY, Buffer.from(JSON.stringify(store, null, 2)));
 }
 
 main().catch(error => {
