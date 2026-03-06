@@ -248,17 +248,10 @@ async function main() {
 
   const existingByFile = new Map((existingStore.default || []).map(video => [video.fileName, video]));
   const videos = await Promise.all(entries.map(entry => buildVideoRecord(entry, existingByFile.get(entry.name))));
-  
-  // Merge with existing videos
-  const allVideos = new Map();
-  (existingStore.default || []).forEach(video => allVideos.set(video.id, video));
-  videos.forEach(video => allVideos.set(video.id, video));
-  
-  const mergedVideos = Array.from(allVideos.values());
-  mergedVideos.sort((a, b) => new Date(b.uploadedAt).getTime() - new Date(a.uploadedAt).getTime());
+  videos.sort((a, b) => new Date(b.uploadedAt).getTime() - new Date(a.uploadedAt).getTime());
 
   const store = {
-    default: mergedVideos,
+    default: videos,
     mpu: existingStore.mpu || [],
   };
 
