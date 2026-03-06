@@ -21,7 +21,6 @@ if (existsSync(envPath)) {
 const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
 const BLOB_STORE_NAME = 'videos';
 const DATA_FILE = path.join(__dirname, '..', 'public', 'uploads', 'data', 'videos.json');
-const DATA_FILE_KEY = 'uploads/data/videos.json';
 
 async function main() {
   const { data, error } = await supabase.storage.from(BLOB_STORE_NAME).list('uploads/videos', {
@@ -55,9 +54,6 @@ async function main() {
   const store = { default: videos, mpu: [] };
   await fs.writeFile(DATA_FILE, JSON.stringify(store, null, 2));
   console.log(`Fetched ${videos.length} videos from Supabase`);
-
-  // Upload to Supabase (though it's already from there, ensure consistency)
-  await supabase.storage.from(BLOB_STORE_NAME).upload(DATA_FILE_KEY, Buffer.from(JSON.stringify(store, null, 2)), { upsert: true });
 }
 
 main().catch(console.error);
