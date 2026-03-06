@@ -212,7 +212,11 @@ const syncStoreWithFilesystem = async (store: VideoStore): Promise<VideoStore> =
   }
 
   const merged = [...retained, ...newlyDiscovered]
-    .sort((a, b) => new Date(b.uploadedAt).getTime() - new Date(a.uploadedAt).getTime());
+    .sort((a, b) => {
+      const dateA = a.scheduledDate || a.uploadedAt;
+      const dateB = b.scheduledDate || b.uploadedAt;
+      return new Date(dateB).getTime() - new Date(dateA).getTime();
+    });
 
   const nextStore: VideoStore = {
     default: merged,
@@ -292,7 +296,11 @@ const normalizeSegment = (segment?: string | null): VideoSegment => (segment ===
 export const listVideos = async (segment: VideoSegment = 'default') => {
   const store = await loadStore();
   return [...store[segment]].sort(
-    (a, b) => new Date(b.uploadedAt).getTime() - new Date(a.uploadedAt).getTime()
+    (a, b) => {
+      const dateA = a.scheduledDate || a.uploadedAt;
+      const dateB = b.scheduledDate || b.uploadedAt;
+      return new Date(dateB).getTime() - new Date(dateA).getTime();
+    }
   );
 };
 
