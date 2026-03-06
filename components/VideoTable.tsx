@@ -130,7 +130,7 @@ interface VideoTableProps {
 
 export default function VideoTable({ videos = [], onVideoUpdated, onVideoDeleted, isMpu = false }: VideoTableProps) {
   const [statusFilter, setStatusFilter] = useState<'all' | VideoStatus>('all');
-  const [sortField, setSortField] = useState<SortField>('uploadedAt');
+  const [sortField, setSortField] = useState<SortField>('scheduledDate');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
   const [searchQuery, setSearchQuery] = useState('');
   const [isUpdating, setIsUpdating] = useState(false);
@@ -416,8 +416,8 @@ export default function VideoTable({ videos = [], onVideoUpdated, onVideoDeleted
           bValue = bMin * 60 + bSec;
           break;
         case 'scheduledDate':
-          aValue = a.scheduledDate ? new Date(a.scheduledDate).getTime() : 0;
-          bValue = b.scheduledDate ? new Date(b.scheduledDate).getTime() : 0;
+          aValue = a.scheduledDate ? new Date(a.scheduledDate).getTime() : new Date(a.uploadedAt).getTime();
+          bValue = b.scheduledDate ? new Date(b.scheduledDate).getTime() : new Date(b.uploadedAt).getTime();
           break;
         case 'uploadedAt':
         default:
