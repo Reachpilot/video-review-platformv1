@@ -1,10 +1,7 @@
-import { createClient } from '@supabase/supabase-js';
-import fs from 'fs/promises';
-import { existsSync, readFileSync } from 'fs';
-import path from 'path';
-import { fileURLToPath } from 'url';
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const { createClient } = require('@supabase/supabase-js');
+const fs = require('fs').promises;
+const { existsSync, readFileSync } = require('fs');
+const path = require('path');
 
 // Load .env.local
 const envPath = path.join(__dirname, '..', '.env.local');
@@ -53,7 +50,12 @@ async function main() {
 
   const store = { default: videos, mpu: [] };
   await fs.writeFile(DATA_FILE, JSON.stringify(store, null, 2));
-  console.log(`Fetched ${videos.length} videos from Supabase`);
+  const jsonBuffer = Buffer.from(JSON.stringify(store, null, 2));
+  await supabase.storage.from(BLOB_STORE_NAME).upload('uploads/data/videos.json', jsonBuffer, {
+    contentType: 'application/json',
+    upsert: true
+  });
+  console.log(`Fetched ${videos.length} videos from Supabase and uploaded to storage`);
 }
 
 main().catch(console.error);
