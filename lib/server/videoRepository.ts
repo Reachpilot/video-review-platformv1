@@ -1,5 +1,5 @@
 import type { Video, VideoStatus } from '../../types/index.ts';
-import { existsSync, writeFileSync, mkdirSync, readFileSync } from 'fs';
+import { existsSync } from 'fs';
 import { readdir, stat } from 'fs/promises';
 import { join, extname, basename } from 'path';
 import { execFile } from 'child_process';
@@ -20,7 +20,6 @@ const VIDEO_STORE_KEY = mediaKey('data', 'videos.json');
 const PUBLIC_UPLOADS_DIR = join(process.cwd(), 'public', 'uploads');
 const PUBLIC_VIDEOS_DIR = join(PUBLIC_UPLOADS_DIR, 'videos');
 const PUBLIC_THUMBS_DIR = join(PUBLIC_VIDEOS_DIR, 'thumbnails');
-const DATA_FILE = join(PUBLIC_UPLOADS_DIR, 'data', 'videos.json');
 const DATA_FILE_KEY = mediaKey('data', 'videos.json');
 const SUPPORTED_EXTENSIONS = new Set(['.mp4', '.mov', '.webm', '.mkv', '.avi']);
 const IGNORED_FILES = new Set(['.gitkeep', '.DS_Store']);
@@ -250,25 +249,43 @@ const parseStore = (raw: Buffer | undefined | null): VideoStore => {
 };
 
 const persistStore = async (store: VideoStore) => {
-  const data = Buffer.from(JSON.stringify(store, null, 2));
-  mkdirSync(join(PUBLIC_UPLOADS_DIR, 'data'), { recursive: true });
-  writeFileSync(DATA_FILE, data);
-  await saveMediaAsset(DATA_FILE_KEY, data, 'application/json');
+  await saveMediaAsset(DATA_FILE_KEY, Buffer.from(JSON.stringify(store, null, 2)), 'application/json');
 };
 
 const loadStore = async (): Promise<VideoStore> => {
-  let store: VideoStore;
+  const asset = await readMediaAsset(DATA_FILE_KEY);
+  if (!asset?.data) {
+    const initial = getInitialStore();
+    await persistStore(initial);
+    return syncStoreWithFilesystem(initial);
+  }
+  const store = parseStore(asset.data);
+
+  // Merge correct metadata from static for all videos, preserving status
   try {
-    const localData = readFileSync(DATA_FILE, 'utf8');
-    store = JSON.parse(localData);
-  } catch {
-    const asset = await readMediaAsset(DATA_FILE_KEY);
-    if (!asset?.data) {
-      const initial = getInitialStore();
-      await persistStore(initial);
-      return syncStoreWithFilesystem(initial);
+    const staticAsset = await readMediaAsset(DATA_FILE_KEY, true);
+    if (staticAsset?.data) {
+      const staticStore = parseStore(staticAsset.data);
+      for (const segment of ['default', 'mpu'] as const) {
+        const videos = store[segment];
+        const staticVideos = staticStore[segment] || [];
+        const staticMap = new Map(staticVideos.map(v => [v.id, v]));
+        for (const video of videos) {
+          const staticVideo = staticMap.get(video.id);
+          if (staticVideo) {
+            // Update metadata from static
+            if (staticVideo.duration) {
+              video.duration = staticVideo.duration;
+            }
+            if (staticVideo.uploadedAt) {
+              video.uploadedAt = staticVideo.uploadedAt;
+            }
+          }
+        }
+      }
     }
-    store = parseStore(asset.data);
+  } catch (error) {
+    // Ignore merge errors
   }
 
   return syncStoreWithFilesystem(store);
@@ -350,10 +367,6 @@ export const deleteVideoRecord = async (videoId: string, segment: VideoSegment =
   }
 
   await persistStore(store);
-};
-
-export const persistVideo = async (video: Video, segment: VideoSegment = 'default') => {
-  return upsertVideoRecord(video, segment);
 };
 
 export const inferSegmentFromParam = (value?: string | null) => normalizeSegment(value);
