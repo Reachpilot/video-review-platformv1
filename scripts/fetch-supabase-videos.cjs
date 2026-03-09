@@ -26,7 +26,7 @@ async function main() {
   });
   if (error) throw error;
 
-  console.log('Files in uploads/videos:', data);
+  console.log('Files in uploads/videos:', data.length);
 
   const videos = data.filter(item => item.name.endsWith('-mp4')).map(item => {
     const filename = item.name.replace('-mp4', '.mp4');
