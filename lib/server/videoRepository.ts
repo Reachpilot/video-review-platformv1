@@ -355,3 +355,5 @@ export const deleteVideoRecord = async (videoId: string, segment: VideoSegment =
 export const persistVideo = async (video: Video, segment: VideoSegment = 'default') => {
   return upsertVideoRecord(video, segment);
 };
+
+export const inferSegmentFromParam = (value?: string | null) => normalizeSegment(value);
