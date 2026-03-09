@@ -352,4 +352,4 @@ export const deleteVideoRecord = async (videoId: string, segment: VideoSegment =
   await persistStore(store);
 };
 
-export const persistVideo = upsertVideoRecord;
+export const inferSegmentFromParam = (value?: string | null) => normalizeSegment(value);
